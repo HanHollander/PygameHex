@@ -2,9 +2,9 @@ import pygame as pg
 
 import actions
 from elements import *
-from model import Game, GUILayer
+from model.game import Game, GUI
 
-def handle_events(game: Game, ui_layer: GUILayer):
+def handle_events(game: Game, ui_layer: GUI):
     for event in pg.event.get():
 
         # quit
@@ -29,57 +29,3 @@ def handle_events(game: Game, ui_layer: GUILayer):
         if event.type == pg.KEYUP:
             game.on_key_up(event)
 
-
-# # mouse down
-
-# def on_mouse_down(event: pg.event.Event, elements: ElementList, game: Game):
-#     for element in elements:
-#         if event.button == 1:
-#             if isinstance(element, Button):
-#                 element.on_mouse_down(event, game)
-#             if isinstance(element, GroupElement):
-#                 on_mouse_down_group(event, element, elements, game)
-                
-
-# def on_mouse_down_group(event: pg.event.Event, group_element: GroupElement, elements: ElementList, game: Game):
-#     for sprite in group_element.sprites():
-#         if isinstance(sprite, Button):
-#             sprite.on_mouse_down(event, game)
-
-
-# # mouse up
-   
-# def on_mouse_up(event: pg.event.Event, elements: ElementList, game: Game):
-#     for element in elements:
-#         if event.button == 1:
-#             if isinstance(element, Button):
-#                 element.on_mouse_up(event, elements, game)
-                    
-# def on_mouse_up_group(event: pg.event.Event, group_element: GroupElement, elements: ElementList, game: Game):
-#     for sprite in group_element.sprites():
-#         if isinstance(sprite, Button):
-#             sprite.on_mouse_up(event, elements, game)
-
-
-# # mouse motion
-
-# def on_mouse_motion(event: pg.event.Event, elements: ElementList, game: Game):
-#     for element in elements:
-#         if isinstance(element, GroupElement):
-#             on_mouse_motion_group(event, element, elements, game)
-                
-
-# def on_mouse_motion_group(event: pg.event.Event, group_element: GroupElement, elements: ElementList, game: Game):
-#     for sprite in group_element.sprites():
-#         if isinstance(sprite, Cursor):
-#             sprite.on_mouse_motion(event)
-
-
-# # key down
-
-# def on_key_down(event: pg.event.Event, elements: ElementList, game: Game):
-#     game.on_key_down(event, elements)
-#     for element in elements:
-#         if isinstance(element, GroupElement):
-#             for sprite in element.sprites():
-#                 pass

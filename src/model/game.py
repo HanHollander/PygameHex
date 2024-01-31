@@ -9,11 +9,19 @@ import config
 import actions
 import debug
 from view import GUIView, View
+from model.hex import Hex
 
 
 class Game:
+
     def __init__(self, view: View):
         self.keys_down: set[int] = set()
+        self.hexes = []
+        for i in range(0, 10):
+            for j in range(0, 10):
+                self.hexes.append(Hex(i, j, 50))
+        for hex in self.hexes:
+            view.add(hex.element)
 
     def update(self, dt: float):
         pass
@@ -27,7 +35,8 @@ class Game:
         self.keys_down.remove(event.key)
 
 
-class GUILayer:
+class GUI:
+
     def __init__(self, view: GUIView) -> None:
         self.cursor = Cursor()
         view.add(self.cursor.element)
@@ -37,6 +46,7 @@ class GUILayer:
 
 
 class Cursor:
+    
     def __init__(self):
         self.element = CursorElement(
             pos=(20, 240 - graphics.img_cursor.get_size()[1] / 2),

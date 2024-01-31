@@ -12,7 +12,7 @@ import util
 
 from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
-    from model import Game
+    from model.game import Game
 
 # element
 

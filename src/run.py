@@ -6,7 +6,7 @@ import config
 import events
 import setup
 import debug
-from model import *
+from model.game import *
 from elements import *
 from view import View, GUIView
 
@@ -24,15 +24,15 @@ def run():
     view = View()
     game = Game(view)
 
-    # Foreground layers
+    # foreground layers
     gui_view = GUIView()
-    gui_layer = GUILayer(gui_view)
+    gui = GUI(gui_view)
 
     # run main loop
-    main_loop(display, clock, view, game, gui_view, gui_layer)
+    main_loop(display, clock, view, game, gui_view, gui)
 
 
-def main_loop(display: pg.Surface, clock: pg.time.Clock, view: View, game: Game, gui_view: GUIView, gui_layer: GUILayer):
+def main_loop(display: pg.Surface, clock: pg.time.Clock, view: View, game: Game, gui_view: GUIView, gui_layer: GUI):
     prev_time = time.time()
     dt = 0  # delta time [s]
     while True:
@@ -47,14 +47,14 @@ def main_loop(display: pg.Surface, clock: pg.time.Clock, view: View, game: Game,
         view.draw(display)
         gui_view.draw(display)
 
-        # debug info
+        # display debug info
         if config.DEBUG_INFO: debug.display_debug(display)
         
         # update screen
         pg.display.flip()
 
         # tick
-        clock.tick(config.FRAMERATE)
+        clock.tick(config.MAX_FRAMERATE)
 
         # delta time
         now = time.time()
