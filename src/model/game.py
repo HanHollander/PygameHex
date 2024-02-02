@@ -9,19 +9,16 @@ import config
 import actions
 import debug
 from view import GUIView, View
-from model.hex import Hex
+from model.hex import HexController
+from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
 
 class Game:
 
     def __init__(self, view: View):
         self.keys_down: set[int] = set()
-        self.hexes = []
-        for i in range(0, 10):
-            for j in range(0, 10):
-                self.hexes.append(Hex(i, j, 50))
-        for hex in self.hexes:
-            view.add(hex.element)
+        self.hex_controller: HexController = HexController(view=view, size=100)
+        self.hex_controller.fill_screen(SCREEN_WIDTH, SCREEN_HEIGHT)
 
     def update(self, dt: float):
         pass
