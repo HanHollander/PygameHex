@@ -1,21 +1,14 @@
-import math
+import sys
 import pygame as pg
-from pygame import Vector2
+import pynkie as pk
 
-import graphics
-import util
-from elements import GroupElement, SpriteElement, CursorElement, PhysicsElement
-import config
-import actions
-import debug
-from view import GUIView, View
 from model.hex import HexController
 from config import SCREEN_WIDTH, SCREEN_HEIGHT
 
 
 class Game:
 
-    def __init__(self, view: View):
+    def __init__(self, view: pk.view.ScaledView):
         self.keys_down: set[int] = set()
         self.hex_controller: HexController = HexController(view=view, size=100)
         self.hex_controller.fill_screen(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -26,30 +19,8 @@ class Game:
     def on_key_down(self, event: pg.event.Event):
         self.keys_down.add(event.key)
         if event.key == pg.K_q:
-            actions.quit()
+            pg.quit()
+            sys.exit()
     
     def on_key_up(self, event: pg.event.Event):
         self.keys_down.remove(event.key)
-
-
-class GUI:
-
-    def __init__(self, view: GUIView) -> None:
-        self.cursor = Cursor()
-        view.add(self.cursor.element)
-
-    def on_mouse_motion(self, event: pg.event.Event):
-        self.cursor.on_mouse_motion(event)
-
-
-class Cursor:
-    
-    def __init__(self):
-        self.element = CursorElement(
-            pos=(20, 240 - graphics.img_cursor.get_size()[1] / 2),
-            img=graphics.img_cursor
-        )
-
-    def on_mouse_motion(self, event: pg.event.Event):
-        self.element.rect = pg.Rect(
-            event.pos, (self.element.rect.w, self.element.rect.h))

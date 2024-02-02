@@ -5,9 +5,9 @@ import random as rnd
 from enum import Enum
 from math import sqrt, cos, sin, pi
 
-from elements import SpriteElement
-from view import View
-from debug import debug
+from pynkie.view import ScaledView
+from pynkie.elements import SpriteElement
+from pynkie.debug import debug
 
 
 # https://www.redblobgames.com/grids/hexagons/
@@ -115,11 +115,11 @@ class Hex:
                        [self.dim[0] / 2, self.dim[1] / 2],
                        Hex.size / 10)
         self.element: SpriteElement = SpriteElement(pos=tuple([self.px[0], self.px[1]]), img=surface)
-    
 
+        
 class HexController:
 
-    def __init__(self, view: View, size: float) -> None:
+    def __init__(self, view: ScaledView, size: float) -> None:
         self.view = view
         self.hexes: list[Hex] = []
         Hex.set_size(size)
