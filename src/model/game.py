@@ -2,16 +2,16 @@ import sys
 import pygame as pg
 import pynkie as pk
 
-from model.hex import AxialCoordinates, Hex, HexController
-from config import SCREEN_WIDTH, SCREEN_HEIGHT
+from model.hex import AxialCoordinates, Hex
+from controller.hex import HexController
 
 
 class Game(pk.model.Model):
 
     def __init__(self, view: pk.view.ScaledView) -> None:
         self.keys_down: set[int] = set()
-        self.hex_controller: HexController = HexController(view=view, size=200)
-        self.hex_controller.fill_screen(SCREEN_WIDTH, SCREEN_HEIGHT)
+        self.hex_controller: HexController = HexController(view=view, hex_size=100, store_size=(20, 20))
+        self.hex_controller.fill_screen()
 
     def update(self, dt: float):
         pass

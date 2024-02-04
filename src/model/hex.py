@@ -1,3 +1,4 @@
+from typing import Any
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -20,6 +21,9 @@ class AxialCoordinates:
 
     def __init__(self, c: tuple[int, int]) -> None:
         self.c: tuple[int, int] = c  # axial coords [q, r]; q + r + s = 0
+
+    def __str__(self):
+        return "<q = " + str(self.q()) + ", r = " + str(self.r()) + ">"
 
     def q(self) -> int:
         return self.c[0]
@@ -46,18 +50,10 @@ class AxialCoordinates:
         r_diff: float = abs(r - c_frac[1])
         s_diff: float = abs(s - (-c_frac[0] - c_frac[1]))
 
-        pk.debug.debug["diffs"] = (q_diff, r_diff, s_diff)
-        pk.debug.debug["c_frac"] = c_frac
         if q_diff > r_diff and q_diff > s_diff:
             q = -r-s
-            pk.debug.debug["adjust"]= "q"
         elif r_diff > s_diff:
             r = -q-s
-            pk.debug.debug["adjust"]= "r"
-        else:
-            pk.debug.debug["adjust"] = "none"
-        pk.debug.debug["cube"] = AxialCoordinates((q, r)).get_cb()
-        pk.debug.debug["adjusted"] = (q, r)
 
         return (q, r)
 
@@ -65,9 +61,10 @@ class AxialCoordinates:
     def ax_to_px(ax: "AxialCoordinates") -> tuple[int, int]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return (Hex.size * np.array(AxialCoordinates.ax_to_px_flat).dot(ax.get())).tolist()
+                px: list[Any] = (Hex.size * np.array(AxialCoordinates.ax_to_px_flat).dot(ax.get())).tolist()
             case HexOrientation.POINTY:
-                return (Hex.size * np.array(AxialCoordinates.ax_to_px_pointy).dot(ax.get())).tolist()
+                px: list[Any] = (Hex.size * np.array(AxialCoordinates.ax_to_px_pointy).dot(ax.get())).tolist()
+        return (round(px[0]), round(px[1]))
             
     @staticmethod
     def px_to_ax(px: tuple[int, int]) -> "AxialCoordinates":
@@ -108,18 +105,28 @@ class Hex(pk.model.Model):
     def calc_dim() -> tuple[int, int]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return (Hex.size *2, round(sqrt(3) * Hex.size))
+                return (Hex.size * 2, round(sqrt(3) * Hex.size))
             case HexOrientation.POINTY:
                 return (round(sqrt(3) * Hex.size), Hex.size * 2)
+            
+    @staticmethod
+    def calc_spacing() -> tuple[int, int]:
+        match Hex.orientation:
+            case HexOrientation.FLAT:
+                return (round(Hex.size * (3/2)), round(sqrt(3) * Hex.size))
+            case HexOrientation.POINTY:
+                return (round(sqrt(3) * Hex.size), round(Hex.size * (3/2)))
             
     @staticmethod
     def set_size(size: int) -> None:
         Hex.size = size
         Hex.dim = Hex.calc_dim()
+        Hex.spacing = Hex.calc_spacing()
             
     # static class variables
-    size: int
-    dim: tuple[int, int]
+    size: int  # "radius" of the hex (center to vertex)
+    dim: tuple[int, int]  # width and height of the hex
+    spacing: tuple[int, int]  # distance between centers of hexes
     orientation: HexOrientation = HexOrientation.FLAT
 
     def __init__(self, q: int, r: int) -> None:
@@ -127,13 +134,16 @@ class Hex(pk.model.Model):
         self.px: tuple[int, int] = AxialCoordinates.ax_to_px(self.ax)
 
         surface = self.make_surface()
-        pos: tuple[int, int] = (int(self.px[0]), int(self.px[1]));
+        pos: tuple[int, int] = (self.px[0] - int(Hex.dim[0] / 2), self.px[1] - int(Hex.dim[1] / 2));
         self.element: pk.elements.SpriteElement = pk.elements.SpriteElement(pos=pos, img=surface)
 
+    def __str__(self) -> str:
+        return "<Hex: ax = " + str(self.ax) + ", px = " + str(self.px) + ">"
+
     def make_surface(self) -> pg.Surface:
-        rgb: list[int] = [abs((22 * int(self.ax.q()) + 53)%255), 
-                          abs((22 * int(self.ax.r()) + 53)%255), 
-                          abs((22 * int(self.ax.s()) + 53)%255)]
+        rgb: list[int] = [abs((22 * int(self.ax.q()))%255), 
+                          abs((22 * int(self.ax.r()))%255), 
+                          abs((22 * int(self.ax.s()))%255)]
         rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
         surface = pg.Surface([self.dim[0], self.dim[1]], pg.SRCALPHA)
         # surface.fill(rgb_inv)
@@ -148,49 +158,10 @@ class Hex(pk.model.Model):
         return surface
 
 
-class HexStore:
-
-    # positive = odd numbered indices, negative = even numbered indices
-
-    def __init__(self) -> None:
-        pass
-
-
-
-class HexController:
-
-    def __init__(self, view: pk.view.ScaledView, size: int) -> None:
-        self.view = view
-        self.hexes: list[list[Hex]] = []
-        Hex.set_size(size)
-        pk.debug.debug["dim"] = Hex.dim
-
-    def fill_screen(self, w: int, h: int):
-        cols = int(w / Hex.dim[1])
-        rows = int(h / Hex.dim[0])
-        pk.debug.debug["cols"] = cols
-        pk.debug.debug["rows"] = rows
-        for col in range(0, cols):
-            self.hexes.append([])
-            for row in range(0, rows):
-                ax: AxialCoordinates = AxialCoordinates.of_to_ax((col, row))
-                hex = Hex(ax.q(), ax.r())
-                self.hexes[col].append(hex)
-                self.view.add(hex.element)
-    
-    def get_hex_at_mouse_px(self, x: int, y: int) -> Hex | None:
-        ax: AxialCoordinates = AxialCoordinates.px_to_ax((x, y))
-        of: tuple[int, int] = AxialCoordinates.ax_to_of(ax)
-        if of[0] < len(self.hexes) and of[1] < len(self.hexes[int(of[0])]):
-            return self.hexes[int(of[0])][int(of[1])]
-        else:
-            return None
-
-
 def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: tuple[int, int], width: int=0) -> None:
     r: int = radius
-    x = position[0]
-    y = position[1]
+    x: int = position[0]
+    y: int = position[1]
     match Hex.orientation:
         case HexOrientation.FLAT:
             pg.draw.polygon(surface, color, [
