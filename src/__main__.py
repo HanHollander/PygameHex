@@ -24,6 +24,7 @@ game = Game(hex_view, hex_controller)
 
 pynkie.add_view(hex_view)
 pynkie.add_model(game)
+pynkie.add_model(hex_controller)
 pynkie.add_event_listeners(pg.KEYDOWN, [game])
 pynkie.add_event_listeners(pg.MOUSEBUTTONDOWN, [hex_view])
 pynkie.add_event_listeners(pg.MOUSEBUTTONUP, [hex_view])

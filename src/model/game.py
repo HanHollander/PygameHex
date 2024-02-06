@@ -13,7 +13,7 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.fill_screen()
+        self.hex_controller.hex_store.fill_store()
 
     def update(self, dt: float) -> None:
         pk.debug.debug["Hex.size"] = Hex.size
@@ -44,7 +44,7 @@ class Game(pk.model.Model):
     def on_mouse_motion(self, event: pg.event.Event) -> None:
         pos: tuple[int, int] = pg.mouse.get_pos()
         offset: tuple[int, int] = self.hex_view.viewport.camera.topleft
-        hex: Hex | None = self.hex_controller.get_hex_at_mouse_px(pos, offset)
+        hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["camera offset"] = offset
         if hex: pk.debug.debug["hex idx (ax, of, px)"] = [hex.ax.c, 
                                                       AxialCoordinates.ax_to_of(hex.ax), 

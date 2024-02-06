@@ -5,7 +5,7 @@ from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, add_tuple, f2, sub_tuple
-from config import DRAG_MOVE_FACTOR, MAX_SCALE, MIN_SCALE, ZOOM_STEP_SIZE, ZOOM_MOVE_FACTOR
+from config import DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
 
 
 class HexView(pk.view.ScaledView):
@@ -14,12 +14,21 @@ class HexView(pk.view.ScaledView):
         pk.view.ScaledView.__init__(self, viewport)
         self.mouse_pos: tuple[int, int] = (0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
-        self.diff_total: tuple[int, int] = (0, 0)
+        self.request_elements = True
+        self.min_max_of: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))
 
     def move_viewport(self, diff: tuple[int | float, int | float]) -> None:
-        self.diff_total = f2(add_tuple(self.diff_total, (round(diff[0]), round(diff[1]))))
         self.viewport.camera.x = self.viewport.camera.x + round(diff[0])
         self.viewport.camera.y = self.viewport.camera.y + round(diff[1])
+
+    def get_mouse_pos_offset(self)-> tuple[int, int]:
+        return f2(add_tuple(pg.mouse.get_pos(), self.viewport.camera.topleft))
+    
+    def get_min_max_of(self)-> tuple[tuple[int, int], tuple[int, int]]:
+        min_of: tuple[int, int] = AxialCoordinates.ax_to_of(AxialCoordinates.px_to_ax(self.viewport.camera.topleft))
+        max_of: tuple[int, int] = AxialCoordinates.ax_to_of(AxialCoordinates.px_to_ax(self.viewport.camera.bottomright))
+        pk.debug.debug["min/max of"] = [min_of, max_of]
+        return (min_of, max_of)
 
     def handle_event(self, event: Event) -> None:
         pk.view.ScaledView.handle_event(self, event)
@@ -45,34 +54,53 @@ class HexView(pk.view.ScaledView):
 
     def on_mouse_motion(self, event: pg.event.Event) -> None:
         new_mouse_pos: tuple[int, int] = pg.mouse.get_pos()
-        pk.debug.debug["mouse pos"] = new_mouse_pos
+        pk.debug.debug["mouse pos"] = [new_mouse_pos, self.get_mouse_pos_offset()]
         if (self.mouse_down[RMB]):
             mouse_diff: tuple[int, int] = f2(sub_tuple(self.mouse_pos, new_mouse_pos))
             self.move_viewport((DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
+            new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
+            if (self.min_max_of != new_min_max_of):
+                self.min_max_of = new_min_max_of
+                self.request_elements = True
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
-        if event.y == -1:
-            new_size: int = max(8, Hex.size - 8)
+        scale: float = 1.
+        if event.y == -1:  # size down, zoom out
+            new_size: int = max(HEX_MIN_SIZE, round(Hex.size * (1 / ZOOM_STEP_FACTOR)))
+            scale = new_size / Hex.size
             if new_size != Hex.size: Hex.set_size(new_size)
-        elif event.y == 1:
-            new_size: int = min(256, Hex.size + 8)
+        elif event.y == 1:  # size up, zoom in
+            new_size: int = min(HEX_MAX_SIZE, round(Hex.size * ZOOM_STEP_FACTOR))
+            scale = new_size / Hex.size
             if new_size != Hex.size: Hex.set_size(new_size)
 
-        # if event.y < 0:
-        #     self.scale = min(MAX_SCALE, self.scale + ZOOM_STEP_SIZE)
-        #     self.recalculate_window_dimensions(self.viewport.screen_size)
-        # elif event.y > 0:
-        #     self.scale = max(MIN_SCALE, self.scale - ZOOM_STEP_SIZE)
-        #     self.recalculate_window_dimensions(self.viewport.screen_size)
+        if scale != 1.:
+            mouse_px: tuple[int, int] = f2(add_tuple(pg.mouse.get_pos(), self.viewport.camera.topleft))
+            diff_px: tuple[float, float] = (mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
+            pk.debug.debug["move viewport: mouse, diff, scale"] = [mouse_px, diff_px, scale]
+            self.move_viewport(diff_px)
+            new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
+            if (self.min_max_of != self.get_min_max_of()):
+                self.min_max_of = new_min_max_of
+                self.request_elements = True
 
-        # if (event.y == 1 and Hex.size < HEX_MAX_SIZE):
-        #     center: tuple[int, int] = (round(self.viewport.screen_size.x / 2), round(self.viewport.screen_size.y / 2))
-        #     mouse_diff: tuple[int, ...] = sub_tuple(self.mouse_pos, center)
-        #     diff: tuple[float, float] = (ZOOM_MOVE_FACTOR * mouse_diff[0] if mouse_diff[0] != 0 else 0., 
-        #                                  ZOOM_MOVE_FACTOR * mouse_diff[1] if mouse_diff[1] != 0 else 0.)
-        #     if diff[0] != 0 or diff[1] != 0:
-        #         self.move_viewport((diff[0], diff[1]))
+    # override View.draw
+    def draw(self, surface: pg.Surface, *args: Any) -> list[pg.Rect]:
+        self.center_camera()
 
-        
+        self.view_surface.blit(self.background, pg.Rect(0, 0, self.viewport.camera.width, self.viewport.camera.height), None, 0)
+
+        for spr in self.sprites():
+            if spr.rect.colliderect(self.viewport.camera):
+                target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
+                                    spr.rect.width, spr.rect.height)
+                self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
+
+        # Scale the view surface to the dimensions of the screen and blit directly
+        pg.transform.scale(self.view_surface, self.viewport.screen_size, surface)
+
+        return []
+            
+
 

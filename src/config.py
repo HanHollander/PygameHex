@@ -16,11 +16,11 @@ class HexOrientation(Enum):
     POINTY = 2
 HEX_INIT_SIZE: int = 128
 HEX_STORE_SIZE: tuple[int, int] = (100, 100)
-HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
+HEX_ORIENTATION: HexOrientation = HexOrientation.FLAT
 
 # hex view
 DRAG_MOVE_FACTOR: float = 1.5
-MIN_SCALE: float = 0.5  # 2x zoomed in
-MAX_SCALE: float = 5.0  # 5x zoomed out
-ZOOM_STEP_SIZE: float = 0.1
-ZOOM_MOVE_FACTOR: float = 0.1
+HEX_MIN_SIZE: int = 8
+HEX_MAX_SIZE: int = 256
+ZOOM_STEP_FACTOR: float = 1.5  # > 1
+ZOOM_MOVE_FACTOR: float = .5

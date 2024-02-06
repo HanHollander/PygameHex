@@ -1,12 +1,14 @@
-from typing import Any, Callable
+from typing import Any, Callable, TYPE_CHECKING
 from config import HEX_INIT_SIZE, HEX_ORIENTATION, HEX_STORE_SIZE, HexOrientation
 import pygame as pg
 import pynkie as pk
 import numpy as np
 
 from math import floor, sqrt, cos, sin, pi
-
 from util import add_tuple, f2
+
+if TYPE_CHECKING:
+    from view.hex import HexView
 
 # https://www.redblobgames.com/grids/hexagons/
 
@@ -159,11 +161,18 @@ class Hex(pk.model.Model):
 
     def __str__(self) -> str:
         return "<Hex: ax = " + str(self.ax) + ", px = " + str(self.px) + ">"
+    
+    def update_size_and_pos(self) -> None:
+        if (self.element.image.get_width() != Hex.dim[0] or self.element.image.get_height() != Hex.dim[1]):
+            self.element.image = self.make_surface()
+            self.px = AxialCoordinates.ax_to_px(self.ax)
+            pos: tuple[int, int] = (self.px[0] - int(Hex.dim[0] / 2), self.px[1] - int(Hex.dim[1] / 2))
+            self.element.rect.topleft = pos
 
     def make_surface(self) -> pg.Surface:
-        rgb: list[int] = [abs((16 * int(self.ax.q()))%255), 
-                          abs((16 * int(self.ax.r()))%255), 
-                          abs((16 * int(self.ax.s()))%255)]
+        rgb: list[int] = [abs((5 * int(self.ax.q()))%255), 
+                          abs((5 * int(self.ax.r()))%255), 
+                          abs((5 * int(self.ax.s()))%255)]
         # rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
         surface = pg.Surface([self.dim[0], self.dim[1]], pg.SRCALPHA)
         # surface.fill(rgb_inv)
@@ -224,30 +233,43 @@ class HexStore(list[list[Hex]]):
                 row_int: int = HexStore.idx_ext_to_int(row_ext)
                 self.store[row_int][col_int] = Hex(ax.q(), ax.r())
 
-    def get_at_ext(self, row_ext: int, col_ext: int) -> Hex:
+    def get_at_ext(self, row_ext: int, col_ext: int) -> Hex | None:
         col_int: int = HexStore.idx_ext_to_int(col_ext)
         row_int: int = HexStore.idx_ext_to_int(row_ext)
-        hex: Hex | None = self.store[row_int][col_int]
-        assert isinstance(hex, Hex), "Hex store contains empty element"
+        hex: Hex | None = self.store[row_int][col_int] if row_int < len(self.store) and col_int < len(self.store[row_int]) else None
         return hex
 
 
 
-class HexController(pk.events.EventListener):
+class HexController(pk.model.Model):
+    i = 0
 
     @staticmethod
     def add_hex_to_view(hex_controller: "HexController", hex: Hex) -> None:
-        hex_controller.view.add(hex.element)
+        hex_controller.hex_view.add(hex.element)
 
     @staticmethod
-    def update_size_and_pos(_: "HexController", hex: Hex) -> None:
-        hex.element.image = hex.make_surface()
-        hex.px = AxialCoordinates.ax_to_px(hex.ax)
-        pos: tuple[int, int] = (hex.px[0] - int(Hex.dim[0] / 2), hex.px[1] - int(Hex.dim[1] / 2))
-        hex.element.rect.topleft = pos
+    def update_size_and_pos(hex_controller: "HexController", hex: Hex) -> None:
+        # only update hex coordinates and element rect if: 
+        # 1. element rect size is not equal to new hex dimensions (after zoom)
+        # afterwards, coordinates are correctly adjusted and element rect has the right size until the next zoom takes place
+        if (hex.element.rect.width != Hex.dim[0] or hex.element.rect.height != Hex.dim[1]):
+            hex.px = AxialCoordinates.ax_to_px(hex.ax)
+            pos: tuple[int, int] = (hex.px[0] - int(Hex.dim[0] / 2), hex.px[1] - int(Hex.dim[1] / 2))
+            hex.element.rect.topleft = pos
+            hex.element.rect.size = Hex.dim
 
-    def __init__(self, view: pk.view.ScaledView) -> None:
-        self.view: pk.view.ScaledView = view
+    @staticmethod
+    def update_image(hex_controller: "HexController", hex: Hex) -> None:
+        # only update image if:
+        # 1. image size is not equal to size of element (meaning a zoom has taken place)
+        # 2. image is in frame (for the first time after a zoom)
+        # afterwards, image size is equal to rect size until next zoom takes place
+        if hex.element.rect.width != hex.element.image.get_width() or hex.element.rect.height != hex.element.image.get_height():
+            hex.element.image = hex.make_surface()
+
+    def __init__(self, view: "HexView") -> None:
+        self.hex_view: "HexView" = view
         Hex.orientation = HEX_ORIENTATION
         self.hex_store: HexStore = HexStore(HEX_STORE_SIZE)
         Hex.set_size(HEX_INIT_SIZE)
@@ -260,23 +282,39 @@ class HexController(pk.events.EventListener):
             case _: pass
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
-        self.apply_to_all(HexController.update_size_and_pos)
+        pass
 
+    def update(self, dt: float) -> None:
+        super().update(dt)
+        if self.hex_view.request_elements:
+
+            print(HexController.i)
+            HexController.i += 1
+            self.hex_view.empty()
+            self.apply_to_all_in_camera(HexController.add_hex_to_view)
+            self.hex_view.request_elements = False
+        self.apply_to_all_in_camera(HexController.update_size_and_pos)
+        self.apply_to_all_in_camera(HexController.update_image)
         
     def apply_to_all(self, f: Callable[["HexController", Hex], None]) -> None:
         for hex_row in self.hex_store.store:
             for hex in hex_row:
-                assert isinstance(hex, Hex), "Hex store contains empty element"
-                f(self, hex)
+                if isinstance(hex, Hex): f(self, hex)
 
-    def fill_screen(self) -> None:
-        self.hex_store.fill_store()
-        self.apply_to_all(HexController.add_hex_to_view)
 
-    def get_hex_at_mouse_px(self, pos: tuple[int, int], offset: tuple[int, int] = (0, 0)) -> Hex | None:
+    def apply_to_all_in_camera(self, f: Callable[["HexController", Hex], None]) -> None:
+        min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.hex_view.get_min_max_of()
+        for row in range(min_max_of[0][1] - 2, min_max_of[1][1] + 2):
+            for col in range(min_max_of[0][0] - 2, min_max_of[1][0] + 2):
+                hex: Hex | None = self.hex_store.get_at_ext(row, col)
+                if isinstance(hex, Hex): f(self, hex)
+
+    # def fill_screen(self) -> None:
+    #     self.hex_store.fill_store()
+    #     self.apply_to_all_in_camera(HexController.add_hex_to_view)
+
+    def get_hex_at_px(self, pos: tuple[int, int], offset: tuple[int, int] = (0, 0)) -> Hex | None:
         ax: AxialCoordinates = AxialCoordinates.px_to_ax_offset(pos, offset)
         of: tuple[int, int] = AxialCoordinates.ax_to_of(ax)
-        if of[0] < len(self.hex_store.store) and of[1] < len(self.hex_store.store[int(of[0])]):
-            return self.hex_store.get_at_ext(int(of[0]), int(of[1]))
-        else:
-            return None
+        
+        return self.hex_store.get_at_ext(int(of[0]), int(of[1]))
