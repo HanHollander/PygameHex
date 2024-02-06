@@ -14,6 +14,7 @@ class Game(pk.model.Model):
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
         self.hex_controller.hex_store.fill_store()
+        self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
         pk.debug.debug["Hex.size"] = Hex.size

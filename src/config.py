@@ -16,7 +16,8 @@ class HexOrientation(Enum):
     POINTY = 2
 HEX_INIT_SIZE: int = 128
 HEX_STORE_SIZE: tuple[int, int] = (100, 100)
-HEX_ORIENTATION: HexOrientation = HexOrientation.FLAT
+HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
+NR_HEX_OUTSIDE_BOUNDS: int = 2
 
 # hex view
 DRAG_MOVE_FACTOR: float = 1.5

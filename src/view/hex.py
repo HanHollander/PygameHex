@@ -14,8 +14,9 @@ class HexView(pk.view.ScaledView):
         pk.view.ScaledView.__init__(self, viewport)
         self.mouse_pos: tuple[int, int] = (0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
-        self.request_elements = True
+        self.request_in_camera = True
         self.min_max_of: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))
+        self.in_camera: set[Hex] = set()
 
     def move_viewport(self, diff: tuple[int | float, int | float]) -> None:
         self.viewport.camera.x = self.viewport.camera.x + round(diff[0])
@@ -61,7 +62,7 @@ class HexView(pk.view.ScaledView):
             new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
             if (self.min_max_of != new_min_max_of):
                 self.min_max_of = new_min_max_of
-                self.request_elements = True
+                self.request_in_camera = True
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
@@ -83,22 +84,23 @@ class HexView(pk.view.ScaledView):
             new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
             if (self.min_max_of != self.get_min_max_of()):
                 self.min_max_of = new_min_max_of
-                self.request_elements = True
+                self.request_in_camera = True
 
-    # override View.draw
+    # override ScaledView.draw
     def draw(self, surface: pg.Surface, *args: Any) -> list[pg.Rect]:
         self.center_camera()
 
         self.view_surface.blit(self.background, pg.Rect(0, 0, self.viewport.camera.width, self.viewport.camera.height), None, 0)
 
-        for spr in self.sprites():
-            if spr.rect.colliderect(self.viewport.camera):
+        for hex in self.in_camera:
+                spr: pk.elements.SpriteElement = hex.element
                 target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
                                     spr.rect.width, spr.rect.height)
                 self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
 
         # Scale the view surface to the dimensions of the screen and blit directly
-        pg.transform.scale(self.view_surface, self.viewport.screen_size, surface)
+        # pg.transform.scale(self.view_surface, self.viewport.screen_size, surface)
+        surface.blit(self.view_surface, (0, 0))
 
         return []
             

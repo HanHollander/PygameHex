@@ -1,5 +1,5 @@
 from typing import Any, Callable, TYPE_CHECKING
-from config import HEX_INIT_SIZE, HEX_ORIENTATION, HEX_STORE_SIZE, HexOrientation
+from config import HEX_INIT_SIZE, HEX_ORIENTATION, HEX_STORE_SIZE, NR_HEX_OUTSIDE_BOUNDS, HexOrientation
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -205,7 +205,7 @@ def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: tuple
             ], width)
 
 
-class HexStore(list[list[Hex]]):
+class HexStore:
 
     @staticmethod
     def idx_ext_to_int(col_ext: int):
@@ -221,6 +221,7 @@ class HexStore(list[list[Hex]]):
     def __init__(self, size: tuple[int, int]) -> None:
         HexStore.set_size(size)
         self.store: list[list[Hex | None]] = [[None for _ in range(HexStore.size[0])] for _ in range(HexStore.size[1])]
+        self.in_camera: set[Hex] = set()
 
     # store negative coordinates on odd indices
     def fill_store(self) -> None:
@@ -238,11 +239,24 @@ class HexStore(list[list[Hex]]):
         row_int: int = HexStore.idx_ext_to_int(row_ext)
         hex: Hex | None = self.store[row_int][col_int] if row_int < len(self.store) and col_int < len(self.store[row_int]) else None
         return hex
+    
+    def update_in_camera(self, min_max_of: tuple[tuple[int, int], tuple[int, int]]) -> None:
+        self.in_camera.clear()
+        row_ints = list(map(HexStore.idx_ext_to_int, [*range(min_max_of[0][1] - NR_HEX_OUTSIDE_BOUNDS, 
+                                                             min_max_of[1][1] + NR_HEX_OUTSIDE_BOUNDS)]))
+        col_ints = list(map(HexStore.idx_ext_to_int, [*range(min_max_of[0][0] - NR_HEX_OUTSIDE_BOUNDS, 
+                                                             min_max_of[1][0] + NR_HEX_OUTSIDE_BOUNDS)]))
+        for row_int in row_ints:
+            for col_int in col_ints:
+                if (row_int < len(self.store) and col_int < len(self.store[row_int])):
+                    hex: Hex | None = self.store[row_int][col_int]
+                    if isinstance(hex, Hex): 
+                        self.in_camera.add(hex)
 
 
 
 class HexController(pk.model.Model):
-    i = 0
+    i: int = 0
 
     @staticmethod
     def add_hex_to_view(hex_controller: "HexController", hex: Hex) -> None:
@@ -264,7 +278,7 @@ class HexController(pk.model.Model):
         # only update image if:
         # 1. image size is not equal to size of element (meaning a zoom has taken place)
         # 2. image is in frame (for the first time after a zoom)
-        # afterwards, image size is equal to rect size until next zoom takes place
+        # afterwards, image size is equal to rect size until the next zoom takes place
         if hex.element.rect.width != hex.element.image.get_width() or hex.element.rect.height != hex.element.image.get_height():
             hex.element.image = hex.make_surface()
 
@@ -281,37 +295,26 @@ class HexController(pk.model.Model):
                 self.on_mouse_wheel(event)
             case _: pass
 
-    def on_mouse_wheel(self, event: pg.event.Event) -> None:
+    def on_mouse_wheel(self, _: pg.event.Event) -> None:
         pass
 
     def update(self, dt: float) -> None:
         super().update(dt)
-        if self.hex_view.request_elements:
-
-            print(HexController.i)
-            HexController.i += 1
-            self.hex_view.empty()
-            self.apply_to_all_in_camera(HexController.add_hex_to_view)
-            self.hex_view.request_elements = False
-        self.apply_to_all_in_camera(HexController.update_size_and_pos)
-        self.apply_to_all_in_camera(HexController.update_image)
+        if self.hex_view.request_in_camera:
+            self.hex_store.update_in_camera(self.hex_view.get_min_max_of())
+            self.apply_to_all_in_camera(HexController.update_size_and_pos)
+            self.apply_to_all_in_camera(HexController.update_image)
+            self.hex_view.in_camera = self.hex_store.in_camera
+            self.hex_view.request_in_camera = False
         
-    def apply_to_all(self, f: Callable[["HexController", Hex], None]) -> None:
+    def apply_to_all_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
         for hex_row in self.hex_store.store:
             for hex in hex_row:
                 if isinstance(hex, Hex): f(self, hex)
 
-
     def apply_to_all_in_camera(self, f: Callable[["HexController", Hex], None]) -> None:
-        min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.hex_view.get_min_max_of()
-        for row in range(min_max_of[0][1] - 2, min_max_of[1][1] + 2):
-            for col in range(min_max_of[0][0] - 2, min_max_of[1][0] + 2):
-                hex: Hex | None = self.hex_store.get_at_ext(row, col)
-                if isinstance(hex, Hex): f(self, hex)
-
-    # def fill_screen(self) -> None:
-    #     self.hex_store.fill_store()
-    #     self.apply_to_all_in_camera(HexController.add_hex_to_view)
+        for hex in self.hex_store.in_camera:
+            f(self, hex)
 
     def get_hex_at_px(self, pos: tuple[int, int], offset: tuple[int, int] = (0, 0)) -> Hex | None:
         ax: AxialCoordinates = AxialCoordinates.px_to_ax_offset(pos, offset)
