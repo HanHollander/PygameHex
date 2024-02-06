@@ -1,11 +1,11 @@
 from typing import Any
-from model.hex import AxialCoordinates, Hex
+from model.hex import AxialCoordinates, Hex, HexChunk
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, add_tuple, f2, sub_tuple
-from config import DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
+from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
 
 
 class HexView(pk.view.ScaledView):
@@ -16,7 +16,7 @@ class HexView(pk.view.ScaledView):
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
         self.request_in_camera = True
         self.min_max_of: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))
-        self.in_camera: set[Hex] = set()
+        self.in_camera: set[HexChunk] = set()
 
     def move_viewport(self, diff: tuple[int | float, int | float]) -> None:
         self.viewport.camera.x = self.viewport.camera.x + round(diff[0])
@@ -92,11 +92,19 @@ class HexView(pk.view.ScaledView):
 
         self.view_surface.blit(self.background, pg.Rect(0, 0, self.viewport.camera.width, self.viewport.camera.height), None, 0)
 
-        for hex in self.in_camera:
-                spr: pk.elements.SpriteElement = hex.element
-                target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
-                                    spr.rect.width, spr.rect.height)
-                self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
+        n = 0
+        for chunk in self.in_camera:
+            for x in range (HEX_CHUNK_SIZE):
+                for y in range(HEX_CHUNK_SIZE):
+                    hex: Hex | None = chunk.hexes[x][y]
+                    if isinstance(hex, Hex):
+                        spr: pk.elements.SpriteElement = hex.element
+                        target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
+                                            spr.rect.width, spr.rect.height)
+                        self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
+                        n+=1
+
+        print(n)
 
         # Scale the view surface to the dimensions of the screen and blit directly
         # pg.transform.scale(self.view_surface, self.viewport.screen_size, surface)

@@ -20,7 +20,6 @@ class Game(pk.model.Model):
         pk.debug.debug["Hex.size"] = Hex.size
         pk.debug.debug["Hex.dim"] = Hex.dim
         pk.debug.debug["Hex.spacing"] = Hex.spacing
-        pk.debug.debug["HexStore.size"] = HexStore.size
 
     def handle_event(self, event: pg.event.Event) -> None:
         pk.model.Model.handle_event(self, event)

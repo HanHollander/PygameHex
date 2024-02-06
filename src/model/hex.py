@@ -1,5 +1,5 @@
 from typing import Any, Callable, TYPE_CHECKING
-from config import HEX_INIT_SIZE, HEX_ORIENTATION, HEX_STORE_SIZE, NR_HEX_OUTSIDE_BOUNDS, HexOrientation
+from config import HEX_CHUNK_SIZE, HEX_INIT_SIZE, HEX_ORIENTATION, HEX_NOF_CHUNKS, NR_HEX_OUTSIDE_BOUNDS, HexOrientation
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -205,54 +205,60 @@ def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: tuple
             ], width)
 
 
+class HexChunk:
+
+    @staticmethod
+    def of_to_hex_idx(of: tuple[int, int]) -> tuple[int, int]:
+        return (of[0] % HEX_CHUNK_SIZE, of[1] % HEX_CHUNK_SIZE)
+
+    def __init__(self, idx: tuple[int, int]) -> None:
+        self.idx: tuple[int, int] = idx  # chunk idx in store 
+        self.hexes: list[list[Hex | None]] = [[None for _ in range(HEX_CHUNK_SIZE)] for _ in range(HEX_CHUNK_SIZE)]
+
+    def fill_chunk(self) -> None:
+        for x in range(HEX_CHUNK_SIZE):
+            for y in range(HEX_CHUNK_SIZE):
+                of_x: int = HEX_CHUNK_SIZE * self.idx[0] + x
+                of_y: int = HEX_CHUNK_SIZE * self.idx[1] + y
+                ax: AxialCoordinates = AxialCoordinates.of_to_ax((of_x, of_y))
+                self.hexes[x][y] = Hex(ax.q(), ax.r())
+
+
 class HexStore:
 
     @staticmethod
-    def idx_ext_to_int(col_ext: int):
-        return col_ext * 2 if col_ext >= 0 else -col_ext * 2 - 1
+    def of_to_chunk_idx(of: tuple[int, int]) -> tuple[int, int]:
+        return (floor(of[0] / HEX_CHUNK_SIZE), floor(of[1] / HEX_CHUNK_SIZE))
 
-    @staticmethod
-    def set_size(size: tuple[int, int]) -> None:
-        HexStore.size = (size[0] if size[0] % 2 == 1 else size[0] + 1, size[1] if size[1] % 2 == 1 else size[1] + 1)
-
-    # static varables
-    size: tuple[int, int]  # size of store, [#cols, #rows]. Always odd, hex with (q=0, r=0) is the middle hex
-
-    def __init__(self, size: tuple[int, int]) -> None:
-        HexStore.set_size(size)
-        self.store: list[list[Hex | None]] = [[None for _ in range(HexStore.size[0])] for _ in range(HexStore.size[1])]
-        self.in_camera: set[Hex] = set()
+    def __init__(self) -> None:
+        self.hex_chunks: list[list[HexChunk]] = [[HexChunk((i, j)) for j in range(HEX_NOF_CHUNKS[0])] for i in range (HEX_NOF_CHUNKS[1])]
+        self.in_camera: set[HexChunk] = set()
 
     # store negative coordinates on odd indices
     def fill_store(self) -> None:
-        assert HexStore.size[0] % 2 == 1 and HexStore.size[1] % 2 == 1, "Store size not odd"
-        half_size: tuple[int, int] = (floor(HexStore.size[0] / 2), floor(HexStore.size[1] / 2))
-        for col_ext in range(-half_size[0], half_size[0] + 1):
-            for row_ext in range(-half_size[1], half_size[1] + 1):
-                ax: AxialCoordinates = AxialCoordinates.of_to_ax((col_ext, row_ext))
-                col_int: int = HexStore.idx_ext_to_int(col_ext)
-                row_int: int = HexStore.idx_ext_to_int(row_ext)
-                self.store[row_int][col_int] = Hex(ax.q(), ax.r())
+        for chunk_row in self.hex_chunks:
+            for chunk in chunk_row:
+                chunk.fill_chunk()
 
-    def get_at_ext(self, row_ext: int, col_ext: int) -> Hex | None:
-        col_int: int = HexStore.idx_ext_to_int(col_ext)
-        row_int: int = HexStore.idx_ext_to_int(row_ext)
-        hex: Hex | None = self.store[row_int][col_int] if row_int < len(self.store) and col_int < len(self.store[row_int]) else None
-        return hex
-    
     def update_in_camera(self, min_max_of: tuple[tuple[int, int], tuple[int, int]]) -> None:
         self.in_camera.clear()
-        row_ints = list(map(HexStore.idx_ext_to_int, [*range(min_max_of[0][1] - NR_HEX_OUTSIDE_BOUNDS, 
-                                                             min_max_of[1][1] + NR_HEX_OUTSIDE_BOUNDS)]))
-        col_ints = list(map(HexStore.idx_ext_to_int, [*range(min_max_of[0][0] - NR_HEX_OUTSIDE_BOUNDS, 
-                                                             min_max_of[1][0] + NR_HEX_OUTSIDE_BOUNDS)]))
-        for row_int in row_ints:
-            for col_int in col_ints:
-                if (row_int < len(self.store) and col_int < len(self.store[row_int])):
-                    hex: Hex | None = self.store[row_int][col_int]
-                    if isinstance(hex, Hex): 
-                        self.in_camera.add(hex)
+        pk.debug.debug["minmaxof chunk"] = min_max_of
+        min_chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(min_max_of[0])
+        max_chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(min_max_of[1])
+        pk.debug.debug["minmax chunk"] = [min_chunk_idx, max_chunk_idx]
+        for x in range(max(0, min_chunk_idx[0]), min(max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0])):
+            for y in range(max(0, min_chunk_idx[1]), min(max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1])):
+                self.in_camera.add(self.hex_chunks[x][y])
+        pk.debug.debug["nr in camera"] = len(self.in_camera)
 
+    def get_hex_at_of(self, of: tuple[int, int]) -> Hex | None:
+        chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(of)
+        if (chunk_idx[0] < 0 or chunk_idx[0] >= HEX_NOF_CHUNKS[0] or chunk_idx[1] < 0 or chunk_idx[1] > HEX_NOF_CHUNKS[1]):
+            return None
+        chunk: HexChunk = self.hex_chunks[chunk_idx[0]][chunk_idx[1]]
+        hex_idx: tuple[int, int] = HexChunk.of_to_hex_idx(of)
+        hex: Hex | None = chunk.hexes[hex_idx[0]][hex_idx[1]]
+        return hex
 
 
 class HexController(pk.model.Model):
@@ -284,8 +290,8 @@ class HexController(pk.model.Model):
 
     def __init__(self, view: "HexView") -> None:
         self.hex_view: "HexView" = view
+        self.hex_store: HexStore = HexStore()
         Hex.orientation = HEX_ORIENTATION
-        self.hex_store: HexStore = HexStore(HEX_STORE_SIZE)
         Hex.set_size(HEX_INIT_SIZE)
 
     def handle_event(self, event: pg.event.Event) -> None:
@@ -308,16 +314,21 @@ class HexController(pk.model.Model):
             self.hex_view.request_in_camera = False
         
     def apply_to_all_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
-        for hex_row in self.hex_store.store:
-            for hex in hex_row:
-                if isinstance(hex, Hex): f(self, hex)
+        for chunk_row in self.hex_store.hex_chunks:
+            for chunk in chunk_row:
+                self.apply_to_all_in_chunk(chunk, f)
 
     def apply_to_all_in_camera(self, f: Callable[["HexController", Hex], None]) -> None:
-        for hex in self.hex_store.in_camera:
-            f(self, hex)
+        for chunk in self.hex_store.in_camera:
+            self.apply_to_all_in_chunk(chunk, f)
+
+    def apply_to_all_in_chunk(self, chunk: HexChunk, f: Callable[["HexController", Hex], None]) -> None:
+        for hex_row in chunk.hexes:
+            for hex in hex_row:
+                if isinstance(hex, Hex): f(self, hex)
 
     def get_hex_at_px(self, pos: tuple[int, int], offset: tuple[int, int] = (0, 0)) -> Hex | None:
         ax: AxialCoordinates = AxialCoordinates.px_to_ax_offset(pos, offset)
         of: tuple[int, int] = AxialCoordinates.ax_to_of(ax)
         
-        return self.hex_store.get_at_ext(int(of[0]), int(of[1]))
+        return self.hex_store.get_hex_at_of(of)

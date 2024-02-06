@@ -15,7 +15,8 @@ class HexOrientation(Enum):
     FLAT = 1
     POINTY = 2
 HEX_INIT_SIZE: int = 128
-HEX_STORE_SIZE: tuple[int, int] = (100, 100)
+HEX_CHUNK_SIZE: int = 8
+HEX_NOF_CHUNKS: tuple[int, int] = (10, 10)
 HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
 NR_HEX_OUTSIDE_BOUNDS: int = 2
 
