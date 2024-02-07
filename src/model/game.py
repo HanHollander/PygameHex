@@ -2,7 +2,7 @@ import sys
 import pygame as pg
 import pynkie as pk
 
-from model.hex import AxialCoordinates, Hex, HexController, HexStore
+from model.hex import AxialCoordinates, Hex, HexController, HexChunkStore
 from view.hex import HexView
 
 
@@ -13,13 +13,13 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.hex_store.fill_store()
-        self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
+        self.hex_controller.hex_chunk_store.fill_store()
+        # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
-        pk.debug.debug["Hex.size"] = Hex.size
-        pk.debug.debug["Hex.dim"] = Hex.dim
-        pk.debug.debug["Hex.spacing"] = Hex.spacing
+        pk.debug.debug["Hex size"] = Hex.size
+        pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
+        pk.debug.debug["Hex spacing (int, float)"] = [Hex.spacing, Hex.spacing_float]
 
     def handle_event(self, event: pg.event.Event) -> None:
         pk.model.Model.handle_event(self, event)
@@ -45,7 +45,7 @@ class Game(pk.model.Model):
         pos: tuple[int, int] = pg.mouse.get_pos()
         offset: tuple[int, int] = self.hex_view.viewport.camera.topleft
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
-        pk.debug.debug["camera offset"] = offset
-        if hex: pk.debug.debug["hex idx (ax, of, px)"] = [hex.ax.c, 
+        pk.debug.debug["Camera offset"] = offset
+        if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax.c, 
                                                       AxialCoordinates.ax_to_of(hex.ax), 
                                                       AxialCoordinates.ax_to_px(hex.ax)]
