@@ -16,10 +16,10 @@ class HexOrientation(Enum):
     POINTY = 2
 HEX_INIT_SIZE: int = 256
 HEX_CHUNK_SIZE: int = 8
-HEX_NOF_CHUNKS: tuple[int, int] = (10, 10)
+HEX_NOF_CHUNKS: tuple[int, int] = (18, 12)
 HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
-NR_HEX_OUTSIDE_BOUNDS: int = 2
 NOF_PAR_PROC: int = 4  # for chunk updating
+NOF_THREADS: int = 8  # for chunk updating
 
 # hex view
 DRAG_MOVE_FACTOR: float = 1.5

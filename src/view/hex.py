@@ -1,5 +1,5 @@
 from typing import Any
-from model.hex import AxialCoordinates, Hex, HexChunk, HexElement
+from model.hex import Ax, Hex, HexChunk, HexElement
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
@@ -26,8 +26,8 @@ class HexView(pk.view.ScaledView):
         return f2(add_tuple(pg.mouse.get_pos(), self.viewport.camera.topleft))
     
     def get_min_max_of(self)-> tuple[tuple[int, int], tuple[int, int]]:
-        min_of: tuple[int, int] = AxialCoordinates.ax_to_of(AxialCoordinates.px_to_ax(self.viewport.camera.topleft))
-        max_of: tuple[int, int] = AxialCoordinates.ax_to_of(AxialCoordinates.px_to_ax(self.viewport.camera.bottomright))
+        min_of: tuple[int, int] = Ax.ax_to_of(Ax.px_to_ax(self.viewport.camera.topleft))
+        max_of: tuple[int, int] = Ax.ax_to_of(Ax.px_to_ax(self.viewport.camera.bottomright))
         return (min_of, max_of)
 
     def handle_event(self, event: Event) -> None:

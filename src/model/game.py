@@ -2,7 +2,7 @@ import sys
 import pygame as pg
 import pynkie as pk
 
-from model.hex import AxialCoordinates, Hex, HexController, HexChunkStore
+from model.hex import Ax, Hex, HexController, HexStore
 from view.hex import HexView
 
 
@@ -13,7 +13,7 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.hex_chunk_store.fill_store()
+        self.hex_controller.hex_store.fill_store()
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
@@ -47,5 +47,5 @@ class Game(pk.model.Model):
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["Camera offset"] = offset
         if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax.c, 
-                                                      AxialCoordinates.ax_to_of(hex.ax), 
-                                                      AxialCoordinates.ax_to_px(hex.ax)]
+                                                      Ax.ax_to_of(hex.ax), 
+                                                      Ax.ax_to_px(hex.ax)]
