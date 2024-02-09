@@ -2,11 +2,9 @@ from typing import Any, Callable, TYPE_CHECKING
 import pygame as pg
 import pynkie as pk
 import numpy as np
-import multiprocessing as mp
-import threading
 
 from math import ceil, floor, sqrt, cos, sin, pi
-from util import add_tuple, f2
+from util import V2, V3
 from config import HEX_CHUNK_SIZE, HEX_INIT_SIZE, HEX_ORIENTATION, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR, HexOrientation
 
 if TYPE_CHECKING:
@@ -24,7 +22,7 @@ class Ax:
     px_to_ax_pointy: list[list[float]] = [[sqrt(3)/3, -1./3], [0, 2./3]]
     
     @staticmethod
-    def ax_round(c_frac: list[float]) -> tuple[int, int]:
+    def ax_round(c_frac: list[float]) -> V2[int]:
         q: int = round(c_frac[0])
         r: int = round(c_frac[1])
         s: int = round(-c_frac[0] - c_frac[1])
@@ -38,65 +36,65 @@ class Ax:
         elif r_diff > s_diff:
             r = -q-s
 
-        return (q, r)
+        return V2(q, r)
 
     @staticmethod
-    def ax_to_px(ax: "Ax") -> tuple[int, int]:
+    def ax_to_px(ax: "Ax") -> V2[int]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_flat).dot(ax.get())).tolist()
+                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_flat).dot(ax.get().t())).tolist()
             case HexOrientation.POINTY:
-                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_pointy).dot(ax.get())).tolist()
-        return (round(px[0]), round(px[1]))
+                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_pointy).dot(ax.get().t())).tolist()
+        return V2(round(px[0]), round(px[1]))
     
     @staticmethod
-    def ax_to_px_offset(ax: "Ax", offset: tuple[int, int]) -> tuple[int, int]:
+    def ax_to_px_offset(ax: "Ax", offset: V2[int]) -> V2[int]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_flat).dot(ax.get())).tolist()
+                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_flat).dot(ax.get().t())).tolist()
             case HexOrientation.POINTY:
-                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_pointy).dot(ax.get())).tolist()
-        return f2(add_tuple((round(px[0]), round(px[1])), offset))
+                px: list[Any] = (Hex.size * np.array(Ax.ax_to_px_pointy).dot(ax.get().t())).tolist()
+        return V2(round(px[0]), round(px[1])) + offset
             
     @staticmethod
-    def px_to_ax(px: tuple[int, int]) -> "Ax":
+    def px_to_ax(px: V2[int]) -> "Ax":
         match Hex.orientation:
             case HexOrientation.FLAT:
                 return Ax(Ax.ax_round(
-                    (np.array(Ax.px_to_ax_flat).dot(px) / Hex.size).tolist()))
+                    (np.array(Ax.px_to_ax_flat).dot(px.t()) / Hex.size).tolist()))
             case HexOrientation.POINTY:
                 return Ax(Ax.ax_round(
-                    (np.array(Ax.px_to_ax_pointy).dot(px) / Hex.size).tolist()))
+                    (np.array(Ax.px_to_ax_pointy).dot(px.t()) / Hex.size).tolist()))
             
     @staticmethod
-    def px_to_ax_offset(px: tuple[int, int], offset: tuple[int, int]) -> "Ax":
-        px_offset: tuple[int, int] = f2(add_tuple(px, offset))
+    def px_to_ax_offset(px: V2[int], offset: V2[int]) -> "Ax":
+        px_offset: V2[int] = px + offset
         match Hex.orientation:
             case HexOrientation.FLAT:
                 return Ax(Ax.ax_round(
-                    (np.array(Ax.px_to_ax_flat).dot(px_offset) / Hex.size).tolist()))
+                    (np.array(Ax.px_to_ax_flat).dot(px_offset.t()) / Hex.size).tolist()))
             case HexOrientation.POINTY:
                 return Ax(Ax.ax_round(
-                    (np.array(Ax.px_to_ax_pointy).dot(px_offset) / Hex.size).tolist()))
+                    (np.array(Ax.px_to_ax_pointy).dot(px_offset.t()) / Hex.size).tolist()))
             
     @staticmethod
-    def ax_to_of(ax: "Ax") -> tuple[int, int]:  # odd-r
+    def ax_to_of(ax: "Ax") -> V2[int]:  # odd-r
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return (ax.q(), round(ax.r() + (ax.q() - (ax.q()&1)) / 2))
+                return V2(ax.q(), round(ax.r() + (ax.q() - (ax.q()&1)) / 2))
             case HexOrientation.POINTY:
-                return (round(ax.q() + (ax.r() - (ax.r()&1)) / 2), ax.r())
+                return V2(round(ax.q() + (ax.r() - (ax.r()&1)) / 2), ax.r())
             
     @staticmethod
-    def of_to_ax(of: tuple[int, int]) -> "Ax":  # odd-q
+    def of_to_ax(of: V2[int]) -> "Ax":  # odd-q
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return Ax((of[0], round(of[1] - (of[0] - (of[0]&1)) / 2)))
+                return Ax(V2(of[0], round(of[1] - (of[0] - (of[0]&1)) / 2)))
             case HexOrientation.POINTY:
-                return Ax((round(of[0] - (of[1] - (of[1]&1)) / 2), of[1]))
+                return Ax(V2(round(of[0] - (of[1] - (of[1]&1)) / 2), of[1]))
 
-    def __init__(self, c: tuple[int, int]) -> None:
-        self.c: tuple[int, int] = c  # axial coords [q, r]; q + r + s = 0
+    def __init__(self, c: V2[int]) -> None:
+        self.c: V2[int] = c  # axial coords [q, r]; q + r + s = 0
 
     def __str__(self):
         return "<q = " + str(self.q()) + ", r = " + str(self.r()) + ">"
@@ -110,11 +108,11 @@ class Ax:
     def s(self) -> int:
         return -self.q() -self.r()
     
-    def get(self) -> tuple[int, int]:
+    def get(self) -> V2[int]:
         return self.c
     
-    def get_cb(self) -> tuple[int, int, int]:
-        return (self.q(), self.r(), self.s())
+    def get_cb(self) -> V3[int]:
+        return V3(self.q(), self.r(), self.s())
 
 
 class HexSpriteStore:
@@ -123,7 +121,7 @@ class HexSpriteStore:
     store: list[pg.Surface] = []
 
     @staticmethod
-    def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: tuple[int, int], width: int=0) -> None:
+    def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: V2[int], width: int=0) -> None:
         r: int = radius
         x: int = position[0]
         y: int = position[1]
@@ -134,47 +132,47 @@ class HexSpriteStore:
                 pg.draw.polygon(surface, color, [(x + r * cos(2 * pi * i / 6 + 2 * pi / 12), y + r * sin(2 * pi * i / 6 + 2 * pi / 12))for i in range(6)], width)
 
     @staticmethod
-    def make_surface(of: tuple[int, int], draw_center: bool = False) -> pg.Surface:
+    def make_surface(of: V2[int], draw_center: bool = False) -> pg.Surface:
         ax: Ax = Ax.of_to_ax(of)
         rgb: list[int] = [abs((5 * int(ax.q()))%255), abs((5 * int(ax.r()))%255), abs((5 * int(ax.s()))%255)]
         rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
         surface = pg.Surface((Hex.dim[0], Hex.dim[1]), pg.SRCALPHA)
-        HexSpriteStore.draw_hex(surface, rgb, Hex.size, (round(Hex.dim[0] / 2), round(Hex.dim[1] / 2)))
+        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(Hex.dim[0] / 2), round(Hex.dim[1] / 2)))
         if draw_center:
             pg.draw.circle(surface, rgb_inv, [Hex.dim[0] / 2, Hex.dim[1] / 2], 1)
         return surface
 
     @staticmethod
     def init_store() -> None:
-        HexSpriteStore.store = [HexSpriteStore.make_surface((i, i)) for i in range(100)]
-        HexSpriteStore.store[12] = HexSpriteStore.make_surface((37, 10))  # test hex
+        HexSpriteStore.store = [HexSpriteStore.make_surface(V2(i, i)) for i in range(100)]
+        HexSpriteStore.store[12] = HexSpriteStore.make_surface(V2(37, 10))  # test hex
 
 
 class Hex(pk.model.Model):
     
     # static class variables
     size: int  # "radius" of the hex (center to vertex)
-    dim: tuple[int, int]  # width and height of the hex
+    dim: V2[int]  # width and height of the hex
     dim_float: tuple[float, float]
-    spacing: tuple[int, int]  # distance between centers of hexes
+    spacing: V2[int]  # distance between centers of hexes
     spacing_float: tuple[float, float]
     orientation: HexOrientation  # pointy or flat top
 
     @staticmethod
-    def calc_dim() -> tuple[tuple[int, int], tuple[float, float]]:
+    def calc_dim() -> tuple[V2[int], tuple[float, float]]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return ((Hex.size * 2, round(sqrt(3) * Hex.size)), (Hex.size * 2, sqrt(3) * Hex.size))
+                return (V2(Hex.size * 2, round(sqrt(3) * Hex.size)), (Hex.size * 2, sqrt(3) * Hex.size))
             case HexOrientation.POINTY:
-                return ((round(sqrt(3) * Hex.size), Hex.size * 2), (sqrt(3) * Hex.size, Hex.size * 2))
+                return (V2(round(sqrt(3) * Hex.size), Hex.size * 2), (sqrt(3) * Hex.size, Hex.size * 2))
             
     @staticmethod
-    def calc_spacing() -> tuple[tuple[int, int], tuple[float, float]]:
+    def calc_spacing() -> tuple[V2[int], tuple[float, float]]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return ((round(Hex.size * (3/2)), round(sqrt(3) * Hex.size)), (Hex.size * (3/2), sqrt(3) * Hex.size))
+                return (V2(round(Hex.size * (3/2)), round(sqrt(3) * Hex.size)), (Hex.size * (3/2), sqrt(3) * Hex.size))
             case HexOrientation.POINTY:
-                return ((round(sqrt(3) * Hex.size), round(Hex.size * (3/2))), (sqrt(3) * Hex.size, Hex.size * (3/2)))
+                return (V2(round(sqrt(3) * Hex.size), round(Hex.size * (3/2))), (sqrt(3) * Hex.size, Hex.size * (3/2)))
             
     @staticmethod
     def set_size(size: int) -> None:
@@ -184,8 +182,8 @@ class Hex(pk.model.Model):
         Hex.size_updated = True
             
     def __init__(self, q: int, r: int) -> None:
-        self._ax: Ax = Ax((q, r))
-        self._px: tuple[int, int] = Ax.ax_to_px(self._ax)
+        self._ax: Ax = Ax(V2(q, r))
+        self._px: V2[int] = Ax.ax_to_px(self._ax)
         self._sprite_idx: int = (q + r) % len(HexSpriteStore.store)
 
         pos: tuple[int, int] = (self._px[0] - int(Hex.dim[0] / 2), self._px[1] - int(Hex.dim[1] / 2));
@@ -194,7 +192,7 @@ class Hex(pk.model.Model):
     def ax(self) -> Ax:
         return self._ax
     
-    def px(self) -> tuple[int, int]:
+    def px(self) -> V2[int]:
         return self._px
     
     def reset_px(self) -> None:
@@ -205,12 +203,11 @@ class Hex(pk.model.Model):
     
     def update_element_rect(self) -> None:
         self._element.rect.topleft = (self._px[0] - int(Hex.dim[0] / 2), self._px[1] - int(Hex.dim[1] / 2))
-        self._element.rect.size = Hex.dim
+        self._element.rect.size = Hex.dim.t()
 
     def update_element_image(self) -> None:
         # scale to new size + 1px padding (to avoid rounding gaps)
         self._element.image = pg.transform.scale(HexSpriteStore.store[self._sprite_idx], (self._element.rect.width + 1, self._element.rect.height + 1))
-        print("after update", self._element.image.get_size())
 
     def __str__(self) -> str:
         return "<Hex: ax = " + str(self._ax) + ", px = " + str(self._px) + ">"
@@ -219,8 +216,8 @@ class Hex(pk.model.Model):
 class HexChunk:
 
     @staticmethod
-    def of_to_hex_idx(of: tuple[int, int]) -> tuple[int, int]:
-        return (of[0] % HEX_CHUNK_SIZE, of[1] % HEX_CHUNK_SIZE)
+    def of_to_hex_idx(of: V2[int]) -> V2[int]:
+        return V2(of[0] % HEX_CHUNK_SIZE, of[1] % HEX_CHUNK_SIZE)
 
     def __init__(self) -> None:
         self._hexes: list[list[Hex | None]] = [[None for _ in range(HEX_CHUNK_SIZE)] for _ in range(HEX_CHUNK_SIZE)]
@@ -228,29 +225,29 @@ class HexChunk:
     def hexes(self) -> list[list[Hex | None]]:
         return self._hexes
 
-    def fill_chunk(self, idx: tuple[int, int]) -> None:
+    def fill_chunk(self, idx: V2[int]) -> None:
         for x in range(HEX_CHUNK_SIZE):
             for y in range(HEX_CHUNK_SIZE):
                 of_x: int = HEX_CHUNK_SIZE * idx[0] + x
                 of_y: int = HEX_CHUNK_SIZE * idx[1] + y
-                ax: Ax = Ax.of_to_ax((of_x, of_y))
+                ax: Ax = Ax.of_to_ax(V2(of_x, of_y))
                 self._hexes[x][y] = Hex(ax.q(), ax.r())
 
-    def get_hex(self, idx: tuple[int, int]) -> Hex | None:
+    def get_hex(self, idx: V2[int]) -> Hex | None:
         return self._hexes[idx[0]][idx[1]]
 
 
 class HexStore:
 
     @staticmethod
-    def of_to_chunk_idx(of: tuple[int, int]) -> tuple[int, int]:
-        return (floor(of[0] / HEX_CHUNK_SIZE), floor(of[1] / HEX_CHUNK_SIZE))
+    def of_to_chunk_idx(of: V2[int]) -> V2[int]:
+        return V2(floor(of[0] / HEX_CHUNK_SIZE), floor(of[1] / HEX_CHUNK_SIZE))
 
     def __init__(self) -> None:
         self._chunks: list[list[HexChunk]] = [[HexChunk() for j in range(HEX_NOF_CHUNKS[1])] for i in range (HEX_NOF_CHUNKS[0])]
         self._in_camera: set[HexChunk] = set()
-        self._min_chunk_idx: tuple[int, int] = (-1, -1)
-        self._max_chunk_idx: tuple[int, int] = (-1, -1)
+        self._min_chunk_idx: V2[int] = V2(-1, -1)
+        self._max_chunk_idx: V2[int] = V2(-1, -1)
 
     def chunks(self) -> list[list[HexChunk]]:
         return self._chunks
@@ -258,17 +255,17 @@ class HexStore:
     def in_camera(self) -> set[HexChunk]:
         return self._in_camera
     
-    def min_max_chunk_idx(self) -> tuple[tuple[int, int], tuple[int, int]]:
-        return (self._min_chunk_idx, self._max_chunk_idx)
+    def min_max_chunk_idx(self) -> V2[V2[int]]:
+        return V2(self._min_chunk_idx, self._max_chunk_idx)
         
     def fill_store(self) -> None:
         for i in range(len(self._chunks)):
             for j in range(len(self._chunks[i])):
-                self._chunks[i][j].fill_chunk((i, j))
+                self._chunks[i][j].fill_chunk(V2(i, j))
 
-    def update_in_camera(self, min_max_of: tuple[tuple[int, int], tuple[int, int]]) -> None:
-        min_chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(min_max_of[0])
-        max_chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(min_max_of[1])
+    def update_in_camera(self, min_max_of: V2[V2[int]]) -> None:
+        min_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[0])
+        max_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[1])
         if min_chunk_idx[0] != self._min_chunk_idx[0] or min_chunk_idx[1] != self._min_chunk_idx[1] \
             or max_chunk_idx[0] != self._max_chunk_idx[0] or max_chunk_idx[1] != self._max_chunk_idx[1]:
             self._min_chunk_idx = min_chunk_idx
@@ -279,12 +276,12 @@ class HexStore:
                 for y in range(max(0, min_chunk_idx[1]), min(max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1])):
                     self._in_camera.add(self._chunks[x][y])
 
-    def get_hex_at_of(self, of: tuple[int, int]) -> Hex | None:
-        chunk_idx: tuple[int, int] = HexStore.of_to_chunk_idx(of)
+    def get_hex_at_of(self, of: V2[int]) -> Hex | None:
+        chunk_idx: V2[int] = HexStore.of_to_chunk_idx(of)
         if (chunk_idx[0] < 0 or chunk_idx[0] >= HEX_NOF_CHUNKS[0] or chunk_idx[1] < 0 or chunk_idx[1] >= HEX_NOF_CHUNKS[1]):
             return None
         chunk: HexChunk = self._chunks[chunk_idx[0]][chunk_idx[1]]
-        hex_idx: tuple[int, int] = HexChunk.of_to_hex_idx(of)
+        hex_idx: V2[int] = HexChunk.of_to_hex_idx(of)
         hex: Hex | None = chunk.get_hex(hex_idx)
         return hex
     
@@ -316,7 +313,6 @@ class HexController(pk.model.Model):
             hex.update_element_image()
             HexController.i += 1
             
-
     def __init__(self, view: "HexView") -> None:
         pk.model.Model.__init__(self)
 
@@ -328,7 +324,7 @@ class HexController(pk.model.Model):
         self._store: HexStore = HexStore()
 
         self.apply_to_all_in_store(HexController.add_hex_to_view)
-
+        
     def store(self):
         return self._store
 
@@ -363,11 +359,11 @@ class HexController(pk.model.Model):
     def apply_to_all_in_chunk(self, chunk: HexChunk, f: Callable[["HexController", Hex], None]) -> None:
         for x in range(HEX_CHUNK_SIZE):
             for y in range(HEX_CHUNK_SIZE):
-                hex: Hex | None = chunk.get_hex((x, y))
+                hex: Hex | None = chunk.get_hex(V2(x, y))
                 if isinstance(hex, Hex): f(self, hex)
 
-    def get_hex_at_px(self, pos: tuple[int, int], offset: tuple[int, int] = (0, 0)) -> Hex | None:
+    def get_hex_at_px(self, pos: V2[int], offset: V2[int] = V2(0, 0)) -> Hex | None:
         ax: Ax = Ax.px_to_ax_offset(pos, offset)
-        of: tuple[int, int] = Ax.ax_to_of(ax)
+        of: V2[int] = Ax.ax_to_of(ax)
         
         return self._store.get_hex_at_of(of)

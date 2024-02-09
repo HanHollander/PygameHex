@@ -4,7 +4,7 @@ import pygame as pg
 from pygame.event import Event
 import pynkie as pk
 
-from util import RMB, add_tuple, f2, sub_tuple
+from util import RMB, V2
 from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
 
 
@@ -12,23 +12,23 @@ class HexView(pk.view.ScaledView):
 
     def __init__(self, viewport: pk.view.Viewport) -> None:
         pk.view.ScaledView.__init__(self, viewport)
-        self.mouse_pos: tuple[int, int] = (0, 0)
+        self.mouse_pos: V2[int] = V2(0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
         self.request_in_camera = True
-        self.min_max_of: tuple[tuple[int, int], tuple[int, int]] = ((0, 0), (0, 0))
+        self.min_max_of: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
         self.in_camera: set[HexChunk] = set()
 
     def move_viewport(self, diff: tuple[int | float, int | float]) -> None:
         self.viewport.camera.x = self.viewport.camera.x + round(diff[0])
         self.viewport.camera.y = self.viewport.camera.y + round(diff[1])
 
-    def get_mouse_pos_offset(self)-> tuple[int, int]:
-        return f2(add_tuple(pg.mouse.get_pos(), self.viewport.camera.topleft))
+    def get_mouse_pos_offset(self)-> V2[int]:
+        return V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
     
-    def get_min_max_of(self)-> tuple[tuple[int, int], tuple[int, int]]:
-        min_of: tuple[int, int] = Ax.ax_to_of(Ax.px_to_ax(self.viewport.camera.topleft))
-        max_of: tuple[int, int] = Ax.ax_to_of(Ax.px_to_ax(self.viewport.camera.bottomright))
-        return (min_of, max_of)
+    def get_min_max_of(self)-> V2[V2[int]]:
+        min_of: V2[int] = Ax.ax_to_of(Ax.px_to_ax(V2(*self.viewport.camera.topleft)))
+        max_of: V2[int] = Ax.ax_to_of(Ax.px_to_ax(V2(*self.viewport.camera.bottomright)))
+        return V2(min_of, max_of)
 
     def handle_event(self, event: Event) -> None:
         pk.view.ScaledView.handle_event(self, event)
@@ -53,12 +53,12 @@ class HexView(pk.view.ScaledView):
         pk.debug.debug["Mouse down"] = self.mouse_down
 
     def on_mouse_motion(self, event: pg.event.Event) -> None:
-        new_mouse_pos: tuple[int, int] = pg.mouse.get_pos()
+        new_mouse_pos: V2[int] = V2(*pg.mouse.get_pos())
         pk.debug.debug["Mouse pos (screen, real)"] = [new_mouse_pos, self.get_mouse_pos_offset()]
         if (self.mouse_down[RMB]):
-            mouse_diff: tuple[int, int] = f2(sub_tuple(self.mouse_pos, new_mouse_pos))
+            mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
             self.move_viewport((DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
-            new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
+            new_min_max_of: V2[V2[int]] = self.get_min_max_of()
             if (self.min_max_of != new_min_max_of):
                 self.min_max_of = new_min_max_of
                 self.request_in_camera = True
@@ -76,10 +76,10 @@ class HexView(pk.view.ScaledView):
 
         if scale != 1.:
             Hex.set_size(new_size)
-            mouse_px: tuple[int, int] = f2(add_tuple(pg.mouse.get_pos(), self.viewport.camera.topleft))
+            mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: tuple[float, float] = (mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
-            new_min_max_of: tuple[tuple[int, int], tuple[int, int]] = self.get_min_max_of()
+            new_min_max_of: V2[V2[int]] = self.get_min_max_of()
             if (self.min_max_of != self.get_min_max_of()):
                 self.min_max_of = new_min_max_of
                 self.request_in_camera = True

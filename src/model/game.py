@@ -3,6 +3,7 @@ import pygame as pg
 import pynkie as pk
 
 from model.hex import Ax, Hex, HexController, HexStore
+from util import V2
 from view.hex import HexView
 
 
@@ -42,8 +43,8 @@ class Game(pk.model.Model):
         self.keys_down.remove(event.key)
 
     def on_mouse_motion(self, event: pg.event.Event) -> None:
-        pos: tuple[int, int] = pg.mouse.get_pos()
-        offset: tuple[int, int] = self.hex_view.viewport.camera.topleft
+        pos: V2[int] = V2(*pg.mouse.get_pos())
+        offset: V2[int] = V2(*self.hex_view.viewport.camera.topleft)
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["Camera offset"] = offset
         if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax().c, 
