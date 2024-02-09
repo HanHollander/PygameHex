@@ -13,7 +13,7 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.hex_store.fill_store()
+        self.hex_controller.store().fill_store()
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
@@ -46,6 +46,6 @@ class Game(pk.model.Model):
         offset: tuple[int, int] = self.hex_view.viewport.camera.topleft
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["Camera offset"] = offset
-        if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax.c, 
-                                                      Ax.ax_to_of(hex.ax), 
-                                                      Ax.ax_to_px(hex.ax)]
+        if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax().c, 
+                                                      Ax.ax_to_of(hex.ax()), 
+                                                      Ax.ax_to_px(hex.ax())]

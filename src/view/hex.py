@@ -1,5 +1,5 @@
 from typing import Any
-from model.hex import Ax, Hex, HexChunk, HexElement
+from model.hex import Ax, Hex, HexChunk
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
@@ -93,9 +93,9 @@ class HexView(pk.view.ScaledView):
         for chunk in self.in_camera:
             for x in range (HEX_CHUNK_SIZE):
                 for y in range(HEX_CHUNK_SIZE):
-                    hex: Hex | None = chunk.hexes[x][y]
+                    hex: Hex | None = chunk.hexes()[x][y]
                     if isinstance(hex, Hex):
-                        spr: HexElement = hex.element
+                        spr: pk.elements.SpriteElement = hex.element()
                         target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
                                             spr.rect.width, spr.rect.height)
                         self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
