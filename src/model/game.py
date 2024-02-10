@@ -2,7 +2,7 @@ import sys
 import pygame as pg
 import pynkie as pk
 
-from model.hex import Ax, Hex, HexController, HexStore
+from model.hex import Ax, Hex, HexChunk, HexController, HexStore
 from util import V2
 from view.hex import HexView
 
@@ -21,6 +21,7 @@ class Game(pk.model.Model):
         pk.debug.debug["Hex size"] = Hex.size
         pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
         pk.debug.debug["Hex spacing (int, float)"] = [Hex.spacing, Hex.spacing_float]
+        pk.debug.debug["Chunk size"] = HexChunk.size
 
     def handle_event(self, event: pg.event.Event) -> None:
         pk.model.Model.handle_event(self, event)
@@ -47,6 +48,11 @@ class Game(pk.model.Model):
         offset: V2[int] = V2(*self.hex_view.viewport.camera.topleft)
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["Camera offset"] = offset
-        if hex: pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax().c, 
+        if hex:
+            pk.debug.debug["Hex indices (ax, of, px)"] = [hex.ax().c, 
                                                       Ax.ax_to_of(hex.ax()), 
                                                       Ax.ax_to_px(hex.ax())]
+            chunk_idx = HexStore.of_to_chunk_idx(Ax.ax_to_of(hex.ax()))
+            pk.debug.debug["Chunk indices (chunk, hex, topleft)"] = [chunk_idx,
+                                                        HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())),
+                                                        self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft()]

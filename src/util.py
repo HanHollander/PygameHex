@@ -25,7 +25,7 @@ class V2(Generic[T]):
     def __init__(self, a: T, b: T) -> None:
         self._t: tuple[T, T] = (a, b)
 
-    def t(self) -> tuple[T, T]:
+    def get(self) -> tuple[T, T]:
         return self._t
     
     def a(self) -> T:
