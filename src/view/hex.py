@@ -1,22 +1,25 @@
 from typing import Any
-from model.hex import Ax, Hex, HexChunk
+from model.hex import Ax, Hex, HexChunk, HexChunkSet, HexStore
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
+from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR
 
 
 class HexView(pk.view.ScaledView):
 
+    i = 0
+
     def __init__(self, viewport: pk.view.Viewport) -> None:
         pk.view.ScaledView.__init__(self, viewport)
+        # mouse related
         self.mouse_pos: V2[int] = V2(0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
-
-        self.request_in_camera = True
-        self.min_max_of: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
+        # draw related
+        self.request_update = True
+        self.min_max_chunk_idx: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
         self.chunk_surface: pg.Surface = pg.Surface((0, 0))
         self.chunk_surface_topleft: V2[int] = V2(0, 0)
         self.chunk_surface_offset: V2[int] = V2(0, 0)
@@ -36,14 +39,30 @@ class HexView(pk.view.ScaledView):
         max_of: V2[int] = Ax.ax_to_of(Ax.px_to_ax(V2(*self.viewport.camera.bottomright)))
         return V2(min_of, max_of)
     
-    def update_chunk_surface(self, topleft: V2[int], nof_chunks: V2[int], in_camera: set[HexChunk]) -> None:
-        surface_size: V2[int] = V2(nof_chunks.x() * HexChunk.size.x(), nof_chunks.y() * HexChunk.size.y())
+    def get_min_max_chunk_idx(self, min_max_of: V2[V2[int]]) -> V2[V2[int]]:
+        min_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[0])
+        min_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0], max(0, min_chunk_idx[0])), min(HEX_NOF_CHUNKS[1], max(0, min_chunk_idx[1])))
+        max_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[1])
+        max_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0], max(0, max_chunk_idx[0])), min(HEX_NOF_CHUNKS[1], max(0, max_chunk_idx[1])))
+        return V2(min_chunk_idx_bounded, max_chunk_idx_bounded)
+    
+    def determine_request_update(self) -> None:
+        new_min_max_of: V2[V2[int]] = self.get_min_max_of()
+        new_min_max_chunk_idx: V2[V2[int]] = self.get_min_max_chunk_idx(new_min_max_of)
+        if (self.min_max_chunk_idx != new_min_max_chunk_idx):
+            print(self.min_max_chunk_idx, new_min_max_chunk_idx, self.i)
+            self.i += 1
+            self.request_update = True
+
+
+
+    def update_chunk_surface(self, in_camera: HexChunkSet, topleft: V2[int]) -> None:
+        surface_size: V2[int] = V2(in_camera.nof_chunks().x() * HexChunk.size.x(), in_camera.nof_chunks().y() * HexChunk.size.y()) # TODO too big because overlap of chunks
+        self.min_max_chunk_idx = V2(in_camera.min_chunk_idx(), in_camera.max_chunk_idx())
         self.chunk_surface = pg.Surface(surface_size.get())
         self.chunk_surface_topleft = topleft
         self.chunk_surface_offset = topleft - V2(self.viewport.camera.x, self.viewport.camera.y)
-        pk.debug.debug["update surface"] = (surface_size, nof_chunks)
-        pk.debug.debug["chunk_surface"] = (self.chunk_surface_topleft, self.chunk_surface_offset)
-        for chunk in in_camera:
+        for chunk in in_camera.chunks():
             for x in range (HEX_CHUNK_SIZE):
                 for y in range(HEX_CHUNK_SIZE):
                     hex: Hex | None = chunk.hexes()[x][y]
@@ -52,14 +71,7 @@ class HexView(pk.view.ScaledView):
                         target_rect = pg.Rect(spr.rect.x - self.chunk_surface_topleft.x(), spr.rect.y - self.chunk_surface_topleft.y(),
                                             spr.rect.width, spr.rect.height)
                         self.chunk_surface.blit(spr.image, target_rect, None, 0)
-        # calc surface size
-        # make surface
-        # for every chunk:     
-        #    for every hex:
-        #        get px coordinates
-        #        blit image on surface
-        # also calculate chunk topleft and store in chunk surface offset
-        pass
+        self.request_update = False
 
 
     # override ScaledView.draw
@@ -118,10 +130,7 @@ class HexView(pk.view.ScaledView):
         if (self.mouse_down[RMB]):
             mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
-            new_min_max_of: V2[V2[int]] = self.get_min_max_of()
-            if (self.min_max_of != new_min_max_of):
-                self.min_max_of = new_min_max_of
-                self.request_in_camera = True
+            self.determine_request_update()
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
@@ -134,16 +143,14 @@ class HexView(pk.view.ScaledView):
             new_size: int = min(HEX_MAX_SIZE, round(Hex.size * ZOOM_STEP_FACTOR))
             scale = new_size / Hex.size
 
-        if scale != 1.:
+        # if zoom happened
+        if new_size != Hex.size:
             Hex.set_size(new_size)
             HexChunk.set_size()
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
-            new_min_max_of: V2[V2[int]] = self.get_min_max_of()
-            if (self.min_max_of != self.get_min_max_of()):
-                self.min_max_of = new_min_max_of
-                self.request_in_camera = True
+            self.determine_request_update()
 
     
             

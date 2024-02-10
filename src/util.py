@@ -17,6 +17,8 @@ class Numeric(Protocol):
     def __truediv__(self: _T, __other: _T) -> Any: ...
     def __floordiv__(self: _T, __other: _T) -> _T: ...
     def __mod__(self: _T, __other: _T) -> _T: ...
+    def __eq__(self: _T, __other: _T) -> bool: ...
+    def __ne__(self: _T, __other: _T) -> bool: ...
 
 T = TypeVar("T", bound=Numeric)
 
@@ -57,7 +59,7 @@ class V2(Generic[T]):
     def __mul__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] * other._t[0], self._t[1] * other._t[1])
     
-    def __truediv__(self, other: "V2[T]") -> "V2[float]":
+    def __truediv__(self, other: "V2[T]") -> "V2[Any]":
         return V2(self._t[0] / other._t[0], self._t[1] / other._t[1])
     
     def __floordiv__(self, other: "V2[T]") -> "V2[T]":
@@ -65,6 +67,18 @@ class V2(Generic[T]):
     
     def __mod__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] % other._t[0], self._t[1] % other._t[1])
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, V2):
+            return self._t == other._t # type: ignore
+        else:
+            return super().__eq__(other)
+        
+    def __ne__(self, other: object) -> bool:
+        if isinstance(other, V2):
+            return not self.__eq__(other) # type: ignore
+        else:
+            return super().__ne__(other)
     
     def __getitem__(self, idx: int) -> T:
         assert idx == 0 or idx == 1, "idx out of range [0, 1]"
@@ -119,7 +133,7 @@ class V3(Generic[T]):
     def __mul__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] * other._t[0], self._t[1] * other._t[1], self._t[2] * other._t[2])
     
-    def __truediv__(self, other: "V3[T]") -> "V3[float]":
+    def __truediv__(self, other: "V3[T]") -> "V3[Any]":
         return V3(self._t[0] / other._t[0], self._t[1] / other._t[1], self._t[2] / other._t[2])
     
     def __floordiv__(self, other: "V3[T]") -> "V3[T]":
@@ -127,6 +141,18 @@ class V3(Generic[T]):
     
     def __mod__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] % other._t[0], self._t[1] % other._t[1], self._t[2] % other._t[2])
+    
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, V3):
+            return self._t == other._t # type: ignore
+        else:
+            return super().__eq__(other)
+        
+    def __ne__(self, other: object) -> bool:
+        if isinstance(other, V3):
+            return not self.__eq__(other) # type: ignore
+        else:
+            return super().__ne__(other)
     
     def __getitem__(self, idx: int) -> T:
         assert idx == 0 or idx == 1 or idx == 2, "idx out of range [0, 2]"
