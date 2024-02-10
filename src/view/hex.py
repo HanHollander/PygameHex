@@ -1,11 +1,11 @@
 from typing import Any
-from model.hex import Ax, Hex, HexChunk, HexChunkSet, HexStore
+from model.hex import Ax, Hex, HexChunk, HexChunkSet, HexSpriteElement, HexStore
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR
+from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR, HexOrientation
 
 
 class HexView(pk.view.ScaledView):
@@ -18,11 +18,14 @@ class HexView(pk.view.ScaledView):
         self.mouse_pos: V2[int] = V2(0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
         # draw related
-        self.request_update = True
+        self.request_position_update = True
+        self.request_chunk_surface_update = True
         self.min_max_chunk_idx: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
         self.chunk_surface: pg.Surface = pg.Surface((0, 0))
         self.chunk_surface_topleft: V2[int] = V2(0, 0)
         self.chunk_surface_offset: V2[int] = V2(0, 0)
+
+    # utility
 
     def move_viewport(self, diff: V2[int | float]) -> None:
         self.viewport.camera.x = self.viewport.camera.x + round(diff[0])
@@ -46,20 +49,29 @@ class HexView(pk.view.ScaledView):
         max_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0], max(0, max_chunk_idx[0])), min(HEX_NOF_CHUNKS[1], max(0, max_chunk_idx[1])))
         return V2(min_chunk_idx_bounded, max_chunk_idx_bounded)
     
-    def determine_request_update(self) -> None:
+    def get_chunk_surface_size(self, nof_chunks: V2[int]) -> V2[int]:
+        match Hex.orientation:
+            case HexOrientation.FLAT:
+                surface_width: int = round(nof_chunks.x() * HexChunk.size.x() - nof_chunks.x() * Hex.dim.x() / 2)
+                surface_height: int = nof_chunks.y() * HexChunk.size.y()
+            case HexOrientation.POINTY:
+                surface_width: int = round(nof_chunks.x() * HexChunk.size.x() - (nof_chunks.x() - 1) * Hex.dim.x() / 2)
+                surface_height: int = round(nof_chunks.y() * HexChunk.size.y() - (nof_chunks.y() - 1) * Hex.dim.y() / 4)
+        return V2(surface_width, surface_height) # TODO too big because overlap of chunks
+    
+    def determine_request_chunk_surface_update(self) -> None:
         new_min_max_of: V2[V2[int]] = self.get_min_max_of()
         new_min_max_chunk_idx: V2[V2[int]] = self.get_min_max_chunk_idx(new_min_max_of)
         if (self.min_max_chunk_idx != new_min_max_chunk_idx):
-            print(self.min_max_chunk_idx, new_min_max_chunk_idx, self.i)
+            print("UPDATE REQUEST", self.i)
             self.i += 1
-            self.request_update = True
+            self.request_chunk_surface_update = True
 
-
+    # drawing
 
     def update_chunk_surface(self, in_camera: HexChunkSet, topleft: V2[int]) -> None:
-        surface_size: V2[int] = V2(in_camera.nof_chunks().x() * HexChunk.size.x(), in_camera.nof_chunks().y() * HexChunk.size.y()) # TODO too big because overlap of chunks
         self.min_max_chunk_idx = V2(in_camera.min_chunk_idx(), in_camera.max_chunk_idx())
-        self.chunk_surface = pg.Surface(surface_size.get())
+        self.chunk_surface = pg.Surface(self.get_chunk_surface_size(in_camera.nof_chunks()).get())
         self.chunk_surface_topleft = topleft
         self.chunk_surface_offset = topleft - V2(self.viewport.camera.x, self.viewport.camera.y)
         for chunk in in_camera.chunks():
@@ -67,12 +79,11 @@ class HexView(pk.view.ScaledView):
                 for y in range(HEX_CHUNK_SIZE):
                     hex: Hex | None = chunk.hexes()[x][y]
                     if isinstance(hex, Hex):
-                        spr: pk.elements.SpriteElement = hex.element()
-                        target_rect = pg.Rect(spr.rect.x - self.chunk_surface_topleft.x(), spr.rect.y - self.chunk_surface_topleft.y(),
-                                            spr.rect.width, spr.rect.height)
-                        self.chunk_surface.blit(spr.image, target_rect, None, 0)
-        self.request_update = False
-
+                        element: HexSpriteElement = hex.element()
+                        target_rect = pg.Rect(element.rect.x - self.chunk_surface_topleft.x(), 
+                                              element.rect.y - self.chunk_surface_topleft.y(),  
+                                              element.rect.width, element.rect.height)
+                        self.chunk_surface.blit(element.image, target_rect, None, 0)
 
     # override ScaledView.draw
     def draw(self, surface: pg.Surface, *_: Any) -> list[pg.Rect]:
@@ -82,26 +93,11 @@ class HexView(pk.view.ScaledView):
         cs_y: int = self.chunk_surface_offset.y()
         self.view_surface.blit(self.background, pg.Rect(0, 0, w, h), None, 0)
         self.view_surface.blit(self.chunk_surface, pg.Rect(0, 0, w, h), pg.Rect(-cs_x, -cs_y , w, h), 0)
-
-        # for chunk in self.in_camera:
-        #     for x in range (HEX_CHUNK_SIZE):
-        #         for y in range(HEX_CHUNK_SIZE):
-        #             hex: Hex | None = chunk.hexes()[x][y]
-        #             if isinstance(hex, Hex):
-        #                 spr: pk.elements.SpriteElement = hex.element()
-        #                 target_rect = pg.Rect(spr.rect.x - self.viewport.camera.x, spr.rect.y - self.viewport.camera.y,
-        #                                     spr.rect.width, spr.rect.height)
-        #                 self.spritedict[spr] = self.view_surface.blit(spr.image, target_rect, None, 0)
         surface.blit(self.view_surface, (0, 0))
                         
-
         return []
 
-
-
-
-
-
+    # event handling
 
     def handle_event(self, event: Event) -> None:
         pk.view.ScaledView.handle_event(self, event)
@@ -130,7 +126,8 @@ class HexView(pk.view.ScaledView):
         if (self.mouse_down[RMB]):
             mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
-            self.determine_request_update()
+            self.determine_request_chunk_surface_update()
+            self.request_position_update = True
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
@@ -150,7 +147,7 @@ class HexView(pk.view.ScaledView):
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
-            self.determine_request_update()
+            self.request_chunk_surface_update = True
 
     
             

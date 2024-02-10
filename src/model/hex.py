@@ -115,6 +115,13 @@ class Ax:
         return V3(self.q(), self.r(), self.s())
 
 
+class HexSpriteElement(pk.elements.Element, pg.sprite.Sprite):
+
+    def __init__(self, pos: tuple[int, int], img: pg.Surface) -> None:
+        pk.elements.Element.__init__(self, pos, img.get_size())
+        pg.sprite.Sprite.__init__(self)
+        self.image: pg.Surface = img
+
 class HexSpriteStore:
 
     # static class variables
@@ -139,9 +146,10 @@ class HexSpriteStore:
                           abs((229 * ax.s() + 52) % 255)]
         rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
         surface = pg.Surface((Hex.dim.x(), Hex.dim.y()), pg.SRCALPHA)
-        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 35)
+        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 0)
+        HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 5)
         if draw_center:
-            pg.draw.circle(surface, rgb_inv, [Hex.dim.x() / 2, Hex.dim.y() / 2], 5)
+            pg.draw.circle(surface, rgb_inv, [Hex.dim.x() / 2, Hex.dim.y() / 2], 20)
         return surface
 
     @staticmethod
@@ -191,7 +199,7 @@ class Hex(pk.model.Model):
         self._sprite_idx: int = chunk_idx.x() + 6325 * chunk_idx.y() % len(HexSpriteStore.store)
 
         pos: tuple[int, int] = (self._px.x() - int(Hex.dim.x() / 2), self._px.y() - int(Hex.dim.y() / 2));
-        self._element: pk.elements.SpriteElement = pk.elements.SpriteElement(pos=pos, img=HexSpriteStore.store[self._sprite_idx])
+        self._element: HexSpriteElement =HexSpriteElement(pos=pos, img=HexSpriteStore.store[self._sprite_idx])
 
     def ax(self) -> Ax:
         return self._ax
@@ -202,7 +210,7 @@ class Hex(pk.model.Model):
     def reset_px(self) -> None:
         self._px = Ax.ax_to_px(self._ax)
     
-    def element(self) -> pk.elements.SpriteElement:
+    def element(self) -> HexSpriteElement:
         return self._element
     
     def update_element_rect(self) -> None:
@@ -326,6 +334,7 @@ class HexChunkSet:
         nof_chunks_x: int = min(self._max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0]) - max(0, self._min_chunk_idx[0])
         nof_chunks_y: int = min(self._max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1]) - max(0, self._min_chunk_idx[1])
         self._nof_chunks = V2(nof_chunks_x, nof_chunks_y)
+        pk.debug.debug["nof chunks"] = self._nof_chunks
     
 
 class HexStore:
@@ -361,15 +370,6 @@ class HexStore:
             self._in_camera.remove_chunks()
             self._in_camera.add_chunks(self._chunks)
                 
-
-
-            # # TODO not full clear
-            # self._in_camera.clear()
-            # # fill the in-camera set (duplicates are not added)
-            # for x in range(max(0, min_chunk_idx[0]), min(max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0])):
-            #     for y in range(max(0, min_chunk_idx[1]), min(max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1])):
-            #         self._in_camera.chunks().add(self._chunks[x][y])
-
     def get_hex_at_of(self, of: V2[int]) -> Hex | None:
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(of)
         chunk: HexChunk | None = self.get_chunk(chunk_idx)
@@ -432,15 +432,20 @@ class HexController(pk.model.Model):
     def update(self, dt: float) -> None:
         pk.model.Model.update(self, dt)
         # check if the view needs an update (on zoom or far enough pan, determined by view)
-        if self._view.request_update:
+        if self._view.request_chunk_surface_update:
             # recalculate the chunks that are in camera
             self._store.update_in_camera(self._view.get_min_max_of())
+        if self._view.request_chunk_surface_update or self._view.request_position_update:
             # update all hexes and chunks to reflect the new situation
             self.apply_to_all_hex_in_camera(HexController.update_rect)
-            self.apply_to_all_hex_in_camera(HexController.update_image)
+            if self._view.request_chunk_surface_update:
+                self.apply_to_all_hex_in_camera(HexController.update_image)
             self.apply_to_all_chunk_in_camera(HexController.update_topleft)
+        if self._view.request_chunk_surface_update:
             # update the chunk surface in the view
             self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft())
+        self._view.request_position_update = False
+        self._view.request_chunk_surface_update = False
         
     def apply_to_all_hex_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
         for x in range(HEX_NOF_CHUNKS.x()):
