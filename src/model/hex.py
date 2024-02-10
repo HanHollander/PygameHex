@@ -244,6 +244,12 @@ class HexChunk:
         self._topleft: V2[int] = self.calc_topleft()
         self._hexes: list[list[Hex | None]] = [[None for _ in range(HEX_CHUNK_SIZE)] for _ in range(HEX_CHUNK_SIZE)]
 
+    def x(self) -> int:
+        return self._idx.x()
+    
+    def y(self) -> int: 
+        return self._idx.y()
+
     def topleft(self) -> V2[int]:
         return self._topleft
     
@@ -297,6 +303,19 @@ class HexChunkSet:
     def clear(self) -> None:
         self._chunks.clear()
 
+    def remove_chunks(self) -> None:
+        # remove chunks with x or y smaller than min
+        self._chunks = {c for c in self._chunks if c.x() < self._min_chunk_idx.x()}
+        self._chunks = {c for c in self._chunks if c.y() < self._min_chunk_idx.y()}
+        # remove chunks with x or y bigger than max
+        self._chunks = {c for c in self._chunks if c.x() > self._max_chunk_idx.x()}
+        self._chunks = {c for c in self._chunks if c.y() > self._max_chunk_idx.y()}
+
+    def add_chunks(self, chunks: list[list[HexChunk]]) -> None:
+        for x in range(max(0, self._min_chunk_idx.x()), min(self._max_chunk_idx.x() + 1, HEX_NOF_CHUNKS[0])):
+            for y in range(max(0, self._min_chunk_idx.y()), min(self._max_chunk_idx.y() + 1, HEX_NOF_CHUNKS[1])):
+                self._chunks.add(chunks[x][y])
+
     def set_min_chunk_idx(self, min_chunk_idx: V2[int]) -> None:
         self._min_chunk_idx = min_chunk_idx
 
@@ -336,14 +355,20 @@ class HexStore:
         if min_chunk_idx != self._in_camera.min_chunk_idx() or max_chunk_idx != self._in_camera.max_chunk_idx():
             self._in_camera.set_min_chunk_idx(V2(max(0, min_chunk_idx.x()), max(0, min_chunk_idx.y())))
             self._in_camera.set_max_chunk_idx(V2(min(HEX_NOF_CHUNKS.x(), max_chunk_idx.x()), min(HEX_NOF_CHUNKS.y(), max_chunk_idx.y())))
-            # set the nof chunks in camera
+            # set the nof chunks in camera based on min/max indices
             self._in_camera.set_nof_chunks()
-            # TODO not full clear
-            self._in_camera.clear()
-            # fill the in-camera set
-            for x in range(max(0, min_chunk_idx[0]), min(max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0])):
-                for y in range(max(0, min_chunk_idx[1]), min(max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1])):
-                    self._in_camera.chunks().add(self._chunks[x][y])
+            # remove and add chunks as needed
+            self._in_camera.remove_chunks()
+            self._in_camera.add_chunks(self._chunks)
+                
+
+
+            # # TODO not full clear
+            # self._in_camera.clear()
+            # # fill the in-camera set (duplicates are not added)
+            # for x in range(max(0, min_chunk_idx[0]), min(max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0])):
+            #     for y in range(max(0, min_chunk_idx[1]), min(max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1])):
+            #         self._in_camera.chunks().add(self._chunks[x][y])
 
     def get_hex_at_of(self, of: V2[int]) -> Hex | None:
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(of)
