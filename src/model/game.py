@@ -2,21 +2,29 @@ import sys
 import pygame as pg
 import pynkie as pk
 
-from model.hex import AxialCoordinates, Hex
-from controller.hex import HexController
+from model.hex import Ax, Hex, HexChunk, HexController, HexStore
+from util import V2
+from view.hex import HexView
 
 
 class Game(pk.model.Model):
 
-    def __init__(self, view: pk.view.ScaledView) -> None:
+    def __init__(self, hex_view: HexView, hex_controller: HexController) -> None:
+        pk.model.Model.__init__(self)
         self.keys_down: set[int] = set()
-        self.hex_controller: HexController = HexController(view=view, hex_size=100, store_size=(20, 20))
-        self.hex_controller.fill_screen()
+        self.hex_view: HexView = hex_view
+        self.hex_controller: HexController = hex_controller
+        self.hex_controller.store().fill_store()
+        # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
-    def update(self, dt: float):
-        pass
+    def update(self, dt: float) -> None:
+        pk.debug.debug["Hex size"] = Hex.size
+        pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
+        pk.debug.debug["Hex spacing (int, float)"] = [Hex.spacing, Hex.spacing_float]
+        pk.debug.debug["Chunk size"] = HexChunk.size
 
     def handle_event(self, event: pg.event.Event) -> None:
+        pk.model.Model.handle_event(self, event)
         match event.type:
             case pg.KEYDOWN:
                 self.on_key_down(event)
@@ -25,19 +33,24 @@ class Game(pk.model.Model):
             case pg.MOUSEMOTION:
                 self.on_mouse_motion(event)
             case _: pass
-    
 
-    def on_key_down(self, event: pg.event.Event):
+    def on_key_down(self, event: pg.event.Event) -> None:
         self.keys_down.add(event.key)
         if event.key == pg.K_q:
             pg.quit()
             sys.exit()
     
-    def on_key_up(self, event: pg.event.Event):
+    def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)
 
-    def on_mouse_motion(self, event: pg.event.Event):
-        pos: tuple[int, int] = pg.mouse.get_pos()
-        hex: Hex | None = self.hex_controller.get_hex_at_mouse_px(pos[0], pos[1])
-        if hex: pk.debug.debug["hex idx (ax, of)"] = [hex.ax.c, AxialCoordinates.ax_to_of(hex.ax)]
-        pk.debug.debug["mouse pos"] = pos
+    def on_mouse_motion(self, event: pg.event.Event) -> None:
+        pos: V2[int] = V2(*pg.mouse.get_pos())
+        offset: V2[int] = V2(*self.hex_view.viewport.camera.topleft)
+        hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
+        pk.debug.debug["Camera offset"] = offset
+        if hex:
+            pk.debug.debug["Hex indices (ax, of, px)"] = \
+                [hex.ax().c, Ax.ax_to_of(hex.ax()), Ax.ax_to_px(hex.ax())]
+            chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(hex.ax()))
+            pk.debug.debug["Chunk indices (chunk, hex, topleft)"] = \
+                [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft()]

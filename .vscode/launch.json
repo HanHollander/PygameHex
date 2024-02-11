@@ -6,11 +6,22 @@
     "configurations": [
         {
             "name": "PyGame Hex",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "src/__main__.py",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "PyGame Hex (profiler)",
+            "type": "debugpy",
+            "request": "launch",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "module": "cProfile",
+            "args": [
+                "-o", "/tmp/tmp.prof", "src/__main__.py"
+            ]
         }
     ]
 }
