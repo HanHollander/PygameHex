@@ -8,6 +8,9 @@ RMB: int = 2
 MMB_UP: int = 4
 MMB_DOWN: int = 5
 
+def even(a: int) -> int:
+    return a + (a % 2)
+
 
 _T = TypeVar('_T')
 class Numeric(Protocol):
