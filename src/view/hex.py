@@ -8,18 +8,30 @@ from util import RMB, V2
 from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR
 
 
+class HexViewFlags():
+
+    def __init__(self) -> None:
+        self.request_reset_scaled_store = False
+        self.request_update_in_camera = False
+        self.request_hex_update_rect = False
+        self.request_chunk_update_topleft_and_bottomright = False
+        self.request_hex_update_image = False
+        self.request_update_chunk_surface = False
+        self.request_add_single_chunk_to_surface = False
+
+        self.pan_happened = False
+        self.zoom_happened = False
+
+
 class HexView(pk.view.ScaledView):
 
     def __init__(self, viewport: pk.view.Viewport) -> None:
         pk.view.ScaledView.__init__(self, viewport)
+        self.flags: HexViewFlags = HexViewFlags()
         # mouse related
         self.mouse_pos: V2[int] = V2(0, 0)
         self.mouse_down: tuple[bool, bool, bool] = (False, False, False)
         # draw related
-        self.request_position_update = True
-        self.request_chunk_surface_update = True
-        self.request_sprite_store_update = False
-        self.request_draw_chunk = False
         self.min_max_chunk_idx: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
         self.chunk_surface: pg.Surface = pg.Surface((0, 0))
         self.chunk_surface_topleft: V2[int] = V2(0, 0)
@@ -66,21 +78,23 @@ class HexView(pk.view.ScaledView):
     #                                         + 2 * CHUNK_SURFACE_PADDING * Hex.dim.y())
     #     return V2(surface_width, surface_height)
     
-    def determine_request_chunk_surface_update(self) -> None:
+    def min_max_chunk_idx_will_change(self) -> bool:
         new_min_max_of: V2[V2[int]] = self.get_min_max_of()
         new_min_max_chunk_idx: V2[V2[int]] = self.get_min_max_chunk_idx(new_min_max_of)
         if (self.min_max_chunk_idx != new_min_max_chunk_idx):
-            self.request_chunk_surface_update = True
+            return True
+        return False
 
     # drawing
 
     def update_chunk_surface(self, in_camera: HexChunkSet, topleft: V2[int], bottomright: V2[int]) -> None:
         surface_size: V2[int] = bottomright - topleft
-        if self.request_sprite_store_update:  # zoom, add all chunks
+        if self.flags.zoom_happened:  # zoom, add all chunks TODO use different flag?
             self.chunks_to_be_drawn.clear()
             for chunk in in_camera.chunks():
                 self.chunks_to_be_drawn.add(chunk)
             self.chunk_surface = pg.Surface(surface_size.get())
+            self.flags.zoom_happened = False  # reset flag
         else:  # pan, only add new chunks
             self.chunks_to_be_drawn = self.chunks_to_be_drawn.union({c for c in in_camera.chunks() if c.x() < self.min_max_chunk_idx[0].x()})
             self.chunks_to_be_drawn = self.chunks_to_be_drawn.union({c for c in in_camera.chunks() if c.y() < self.min_max_chunk_idx[0].y()})
@@ -94,7 +108,7 @@ class HexView(pk.view.ScaledView):
         self.min_max_chunk_idx = V2(in_camera.min_chunk_idx(), in_camera.max_chunk_idx())
         self.chunk_surface_topleft = topleft
         self.chunk_surface_offset = topleft - V2(self.viewport.camera.x, self.viewport.camera.y)
-        self.request_draw_chunk = True
+        self.flags.request_add_single_chunk_to_surface = True
 
     def add_single_chunk_to_surface(self) -> None:
         chunk_nr: int = 0
@@ -110,9 +124,8 @@ class HexView(pk.view.ScaledView):
                                               element.rect.width, element.rect.height)
                         self.chunk_surface.blit(element.image, target_rect, None, 0)
             chunk_nr += 1
-        self.request_draw_chunk: bool = len(self.chunks_to_be_drawn) > 0
+        self.flags.request_add_single_chunk_to_surface = len(self.chunks_to_be_drawn) > 0
             
-
 
     # override ScaledView.draw
     def draw(self, surface: pg.Surface, *_: Any) -> list[pg.Rect]:
@@ -155,8 +168,12 @@ class HexView(pk.view.ScaledView):
         if (self.mouse_down[RMB]):
             mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
-            self.determine_request_chunk_surface_update()
-            self.request_position_update = True
+            if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices will change next frame (as a result of a pan)
+                self.flags.request_update_in_camera = True
+                self.flags.request_chunk_update_topleft_and_bottomright = True  # topleft or bottomright of chunks always changes
+                self.flags.request_update_chunk_surface = True  # chunk surface always changes
+                self.flags.request_hex_update_image = True  # image always needs updating (to new scale)
+                self.flags.request_hex_update_rect = True
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
@@ -176,8 +193,14 @@ class HexView(pk.view.ScaledView):
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
-            self.request_chunk_surface_update = True
-            self.request_sprite_store_update = True
+            self.flags.request_reset_scaled_store = True  # request for the sprites to be scaled
+            if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
+                self.flags.request_update_in_camera = True
+            self.flags.request_hex_update_rect = True
+            self.flags.request_chunk_update_topleft_and_bottomright = True  # topleft or bottomright of chunks always changes
+            self.flags.request_hex_update_image = True  # image always needs updating (to new scale)
+            self.flags.request_update_chunk_surface = True  # chunk surface always changes
+            self.flags.zoom_happened = True
 
     
             

@@ -237,7 +237,6 @@ class HexChunk:
                 w: int = round((HEX_CHUNK_SIZE - ((HEX_CHUNK_SIZE - 1)* (1/4))) * Hex.dim.x())
                 h: int = round((HEX_CHUNK_SIZE + (1/2)) * Hex.dim.y())
             case HexOrientation.POINTY:
-                print(HEX_CHUNK_SIZE, Hex.dim.x(), 8.5 * Hex.dim.x())
                 w: int = round((HEX_CHUNK_SIZE + (1/2)) * Hex.dim.x())
                 h: int = round((HEX_CHUNK_SIZE - ((HEX_CHUNK_SIZE - 1) * (1/4))) * Hex.dim.y())
         HexChunk.size = V2(w, h)
@@ -446,28 +445,41 @@ class HexController(pk.model.Model):
     def update(self, dt: float) -> None:
         pk.model.Model.update(self, dt)
 
-        if self._view.request_sprite_store_update:
+
+        if self._view.flags.request_reset_scaled_store:
+            print("request_reset_scaled_store", HexController.i)
+            self._view.flags.request_reset_scaled_store = False
             HexSpriteStore.reset_scaled_store()
 
-        if self._view.request_chunk_surface_update:
+        if self._view.flags.request_update_in_camera:
+            print("request_update_in_camera", HexController.i)
+            self._view.flags.request_update_in_camera = False
             self._store.update_in_camera(self._view.get_min_max_of())
-        
-        if self._view.request_chunk_surface_update or self._view.request_position_update:
+
+        if self._view.flags.request_hex_update_rect:
+            print("request_hex_update_rect", HexController.i)
+            self._view.flags.request_hex_update_rect = False
             self.apply_to_all_hex_in_camera(HexController.update_rect)
+
+        if self._view.flags.request_chunk_update_topleft_and_bottomright:
+            print("request_chunk_update_topleft_and_bottomright", HexController.i)
+            self._view.flags.request_chunk_update_topleft_and_bottomright = False
             self.apply_to_all_chunk_in_camera(HexController.update_topleft_and_bottomright)
-            if self._view.request_chunk_surface_update:
-                self.apply_to_all_hex_in_camera(HexController.update_image)
-        
-        if self._view.request_chunk_surface_update:
+
+        if self._view.flags.request_hex_update_image:
+            print("request_hex_update_image", HexController.i)
+            self._view.flags.request_hex_update_image = False
+            self.apply_to_all_hex_in_camera(HexController.update_image)
+
+        if self._view.flags.request_update_chunk_surface:
+            print("request_update_chunk_surface", HexController.i)
+            self._view.flags.request_update_chunk_surface = False
             self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
 
-        if self._view.request_draw_chunk:
+        if self._view.flags.request_add_single_chunk_to_surface:
+            # flag gets reset by view
             self._view.add_single_chunk_to_surface()
 
-        self._view.request_sprite_store_update = False
-        self._view.request_position_update = False
-        self._view.request_chunk_surface_update = False
-        # self._view.request_draw_chunk is reset by view itself
         HexController.i += 1
         
     def apply_to_all_hex_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
