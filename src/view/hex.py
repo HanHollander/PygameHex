@@ -1,5 +1,5 @@
 from typing import Any
-from model.hex import Ax, Hex, HexChunk, HexChunkSet, HexSpriteElement, HexStore
+from model.hex import Ax, Hex, HexChunk, HexChunkSet, HexController, HexSpriteElement, HexStore
 import pygame as pg
 from pygame.event import Event
 import pynkie as pk
@@ -10,8 +10,6 @@ from config import DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE,
 
 class HexView(pk.view.ScaledView):
 
-    i = 0
-
     def __init__(self, viewport: pk.view.Viewport) -> None:
         pk.view.ScaledView.__init__(self, viewport)
         # mouse related
@@ -20,6 +18,7 @@ class HexView(pk.view.ScaledView):
         # draw related
         self.request_position_update = True
         self.request_chunk_surface_update = True
+        self.request_sprite_store_update = False
         self.min_max_chunk_idx: V2[V2[int]] = V2(V2(0, 0), V2(0, 0))
         self.chunk_surface: pg.Surface = pg.Surface((0, 0))
         self.chunk_surface_topleft: V2[int] = V2(0, 0)
@@ -63,8 +62,7 @@ class HexView(pk.view.ScaledView):
         new_min_max_of: V2[V2[int]] = self.get_min_max_of()
         new_min_max_chunk_idx: V2[V2[int]] = self.get_min_max_chunk_idx(new_min_max_of)
         if (self.min_max_chunk_idx != new_min_max_chunk_idx):
-            print("UPDATE REQUEST", self.i)
-            self.i += 1
+            print("request chunk surface update", HexController.i)
             self.request_chunk_surface_update = True
 
     # drawing
@@ -127,6 +125,7 @@ class HexView(pk.view.ScaledView):
             mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
             self.determine_request_chunk_surface_update()
+            print("request position update", HexController.i)
             self.request_position_update = True
         self.mouse_pos = new_mouse_pos
 
@@ -147,7 +146,10 @@ class HexView(pk.view.ScaledView):
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
+            print("request chunk surface update", HexController.i)
+            print("request sprite store update", HexController.i)
             self.request_chunk_surface_update = True
+            self.request_sprite_store_update = True
 
     
             

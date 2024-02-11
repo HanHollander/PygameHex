@@ -125,7 +125,8 @@ class HexSpriteElement(pk.elements.Element, pg.sprite.Sprite):
 class HexSpriteStore:
 
     # static class variables
-    store: list[pg.Surface] = []
+    _store: list[pg.Surface] = []  # should not access, use scaled_store instead
+    scaled_store: list[pg.Surface] = []
 
     @staticmethod
     def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: V2[int], width: int=0) -> None:
@@ -154,8 +155,16 @@ class HexSpriteStore:
 
     @staticmethod
     def init_store() -> None:
-        HexSpriteStore.store = [HexSpriteStore.make_surface(V2(i, j)) for i in range(10) for j in range(10)]
-        HexSpriteStore.store[0] = HexSpriteStore.make_surface(V2(3, 3))  # test hex
+        HexSpriteStore._store = [HexSpriteStore.make_surface(V2(i, j)) for i in range(10) for j in range(10)]
+        HexSpriteStore._store[0] = HexSpriteStore.make_surface(V2(3, 3))  # test hex
+        for sprite in HexSpriteStore._store:
+            HexSpriteStore.scaled_store.append(sprite.copy())
+
+    @staticmethod
+    def reset_scaled_store() -> None:
+        for i in range(len(HexSpriteStore.scaled_store)):
+            # scale to new size + 1px padding (to avoid rounding gaps)
+            HexSpriteStore.scaled_store[i] =  pg.transform.scale(HexSpriteStore._store[i], (Hex.dim[0] + 1, Hex.dim[1] + 1))
 
 
 class Hex(pk.model.Model):
@@ -196,10 +205,10 @@ class Hex(pk.model.Model):
         self._px: V2[int] = Ax.ax_to_px(self._ax)
 
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
-        self._sprite_idx: int = chunk_idx.x() + 6325 * chunk_idx.y() % len(HexSpriteStore.store)
+        self._sprite_idx: int = chunk_idx.x() + 6325 * chunk_idx.y() % len(HexSpriteStore.scaled_store)
 
         pos: tuple[int, int] = (self._px.x() - int(Hex.dim.x() / 2), self._px.y() - int(Hex.dim.y() / 2));
-        self._element: HexSpriteElement =HexSpriteElement(pos=pos, img=HexSpriteStore.store[self._sprite_idx])
+        self._element: HexSpriteElement = HexSpriteElement(pos=pos, img=HexSpriteStore.scaled_store[self._sprite_idx])
 
     def ax(self) -> Ax:
         return self._ax
@@ -218,8 +227,9 @@ class Hex(pk.model.Model):
         self._element.rect.size = Hex.dim.get()
 
     def update_element_image(self) -> None:
-        # scale to new size + 1px padding (to avoid rounding gaps)
-        self._element.image = pg.transform.scale(HexSpriteStore.store[self._sprite_idx], (self._element.rect.width + 1, self._element.rect.height + 1))
+        self._element.image = HexSpriteStore.scaled_store[self._sprite_idx]
+        # self._element.image = pg.transform.scale(HexSpriteStore._store[self._sprite_idx], (self._element.rect.width + 1, self._element.rect.height + 1))
+        pass
 
     def __str__(self) -> str:
         return "<Hex: ax = " + str(self._ax) + ", px = " + str(self._px) + ">"
@@ -338,6 +348,7 @@ class HexChunkSet:
     
 
 class HexStore:
+    i: int
 
     @staticmethod
     def of_to_chunk_idx(of: V2[int]) -> V2[int]:
@@ -389,6 +400,8 @@ class HexStore:
     
 
 class HexController(pk.model.Model):
+    i: int = 0
+
     @staticmethod
     def add_hex_to_view(hex_controller: "HexController", hex: Hex) -> None:
         hex_controller._view.add(hex.element())
@@ -398,7 +411,7 @@ class HexController(pk.model.Model):
         # only update hex coordinates and element rect if: 
         # 1. element rect size is not equal to new hex dimensions (after zoom)
         # afterwards, coordinates are correctly adjusted and element rect has the right size until the next zoom takes place
-        if (hex.element().rect.width != Hex.dim.x() or hex.element().rect.height != Hex.dim.y()):
+        if V2(hex.element().rect.width, hex.element().rect.height) != Hex.dim:
             hex.reset_px()
             hex.update_element_rect()
 
@@ -409,7 +422,7 @@ class HexController(pk.model.Model):
         # 2. image is in frame (for the first time after a zoom)
         # afterwards, image size is equal to rect size until the next zoom takes place
         # image size is 1px larger because of rounding error gap mitigation (see update_element_image())
-        if hex.element().rect.width + 1 != hex.element().image.get_width() or hex.element().rect.height + 1 != hex.element().image.get_height():
+        if V2(hex.element().rect.width + 1, hex.element().rect.height + 1) != V2(hex.element().image.get_width(), hex.element().image.get_height()):
             hex.update_element_image()
 
     @staticmethod
@@ -431,21 +444,31 @@ class HexController(pk.model.Model):
 
     def update(self, dt: float) -> None:
         pk.model.Model.update(self, dt)
-        # check if the view needs an update (on zoom or far enough pan, determined by view)
+
+        if self._view.request_sprite_store_update:
+            print("reset scaled store", HexController.i)
+            HexSpriteStore.reset_scaled_store()
+
         if self._view.request_chunk_surface_update:
-            # recalculate the chunks that are in camera
+            print("update the in-camera chunk set", HexController.i)
             self._store.update_in_camera(self._view.get_min_max_of())
+        
         if self._view.request_chunk_surface_update or self._view.request_position_update:
-            # update all hexes and chunks to reflect the new situation
+            print("update hex and chunk postions and sizes", HexController.i)
             self.apply_to_all_hex_in_camera(HexController.update_rect)
-            if self._view.request_chunk_surface_update:
-                self.apply_to_all_hex_in_camera(HexController.update_image)
             self.apply_to_all_chunk_in_camera(HexController.update_topleft)
+            if self._view.request_chunk_surface_update:
+                print("update hex images", HexController.i)
+                self.apply_to_all_hex_in_camera(HexController.update_image)
+        
         if self._view.request_chunk_surface_update:
-            # update the chunk surface in the view
+            print("update chunk surface", HexController.i)
             self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft())
+
+        self._view.request_sprite_store_update = False
         self._view.request_position_update = False
         self._view.request_chunk_surface_update = False
+        HexController.i += 1
         
     def apply_to_all_hex_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
         for x in range(HEX_NOF_CHUNKS.x()):
@@ -469,4 +492,4 @@ class HexController(pk.model.Model):
     def get_hex_at_px(self, px: V2[int], offset: V2[int] = V2(0, 0)) -> Hex | None:
         ax: Ax = Ax.px_to_ax_offset(px, offset)
         of: V2[int] = Ax.ax_to_of(ax)
-        return self._store.get_hex_at_of(of)
+        return self._store.get_hex_at_of(of) 
