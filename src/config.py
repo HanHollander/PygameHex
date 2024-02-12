@@ -18,7 +18,7 @@ class HexOrientation(Enum):
     POINTY = 2
 HEX_INIT_SIZE: int = 256
 HEX_CHUNK_SIZE: int = 8
-HEX_NOF_CHUNKS: V2[int] = V2(6, 6)
+HEX_NOF_CHUNKS: V2[int] = V2(12, 8)
 HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
 
 # hex view

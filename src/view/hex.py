@@ -55,28 +55,10 @@ class HexView(pk.view.ScaledView):
     
     def get_min_max_chunk_idx(self, min_max_of: V2[V2[int]]) -> V2[V2[int]]:
         min_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[0])
-        min_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0], max(0, min_chunk_idx[0])), min(HEX_NOF_CHUNKS[1], max(0, min_chunk_idx[1])))
+        min_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0] - 1, max(0, min_chunk_idx[0])), min(HEX_NOF_CHUNKS[1] - 1, max(0, min_chunk_idx[1])))
         max_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[1])
-        max_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0], max(0, max_chunk_idx[0])), min(HEX_NOF_CHUNKS[1], max(0, max_chunk_idx[1])))
+        max_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0] - 1, max(0, max_chunk_idx[0])), min(HEX_NOF_CHUNKS[1] - 1, max(0, max_chunk_idx[1])))
         return V2(min_chunk_idx_bounded, max_chunk_idx_bounded)
-    
-    # def get_chunk_surface_size(self, nof_chunks: V2[int]) -> V2[int]:
-    #     match Hex.orientation:
-    #         case HexOrientation.FLAT:
-    #             surface_width: int = round(nof_chunks.x() * HexChunk.size.x() 
-    #                                        - (nof_chunks.x() - 1) * Hex.dim.x() / 4 
-    #                                        + 2 * CHUNK_SURFACE_PADDING * Hex.dim.x())
-    #             surface_height: int = round(nof_chunks.y() * HexChunk.size.y() 
-    #                                        - (nof_chunks.y() - 1) * Hex.dim.y() / 2 
-    #                                        + 2 * CHUNK_SURFACE_PADDING * Hex.dim.y())
-    #         case HexOrientation.POINTY:
-    #             surface_width: int = round(nof_chunks.x() * HexChunk.size.x()   # TODO something still wrong with this calculation... Rounding?
-    #                                        - (nof_chunks.x() - 1) * Hex.dim.x() / 2 
-    #                                        + 2 * CHUNK_SURFACE_PADDING * Hex.dim.x())
-    #             surface_height: int = round(nof_chunks.y() * HexChunk.size.y() 
-    #                                         - (nof_chunks.y() - 1) * Hex.dim.y() / 4 
-    #                                         + 2 * CHUNK_SURFACE_PADDING * Hex.dim.y())
-    #     return V2(surface_width, surface_height)
     
     def min_max_chunk_idx_will_change(self) -> bool:
         new_min_max_of: V2[V2[int]] = self.get_min_max_of()
@@ -170,10 +152,10 @@ class HexView(pk.view.ScaledView):
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
             if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices will change next frame (as a result of a pan)
                 self.flags.request_update_in_camera = True
-                self.flags.request_chunk_update_topleft_and_bottomright = True  # topleft or bottomright of chunks always changes
-                self.flags.request_update_chunk_surface = True  # chunk surface always changes
-                self.flags.request_hex_update_image = True  # image always needs updating (to new scale)
-                self.flags.request_hex_update_rect = True
+                self.flags.request_hex_update_rect = True  # TODO chunk for chunk? only for new? YES
+                self.flags.request_chunk_update_topleft_and_bottomright = True
+                self.flags.request_update_chunk_surface = True
+                self.flags.request_hex_update_image = True  # TODO chunk for chunk? only for new? YES
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:

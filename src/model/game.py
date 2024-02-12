@@ -1,5 +1,5 @@
 import sys
-from config import HexOrientation
+from config import MAX_FRAMERATE, HexOrientation
 import pygame as pg
 import pynkie as pk
 
@@ -16,9 +16,16 @@ class Game(pk.model.Model):
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
         self.hex_controller.store().fill_store()
+        self.min_fps: int = MAX_FRAMERATE
+        self.max_fps: int = 0
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
+        if dt > 0:
+            fps: int = round(1 / dt)
+            if fps < self.min_fps: self.min_fps = fps
+            if fps > self.max_fps: self.max_fps = fps
+        pk.debug.debug["FPS min/max"] = (self.min_fps, self.max_fps)
         pk.debug.debug["Hex size"] = Hex.size
         pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
         pk.debug.debug["Chunk size"] = HexChunk.size
