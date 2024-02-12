@@ -13,9 +13,9 @@ class HexViewFlags():
     def __init__(self) -> None:
         self.request_reset_scaled_store = False
         self.request_update_in_camera = False
-        self.request_hex_update_rect = False
+        self.request_hex_update_px = False
         self.request_chunk_update_topleft_and_bottomright = False
-        self.request_hex_update_image = False
+        self.request_hex_update_element = False
         self.request_update_chunk_surface = False
         self.request_add_single_chunk_to_surface = False
 
@@ -96,10 +96,14 @@ class HexView(pk.view.ScaledView):
         chunk_nr: int = 0
         while len(self.chunks_to_be_drawn) > 0 and chunk_nr < CHUNKS_PER_FRAME:
             chunk: HexChunk = self.chunks_to_be_drawn.pop()
+            chunk.reset_topleft()
+            chunk.reset_bottomright()
             for x in range (HEX_CHUNK_SIZE):
                 for y in range(HEX_CHUNK_SIZE):
                     hex: Hex | None = chunk.hexes()[x][y]
-                    if isinstance(hex, Hex):
+                    if hex:
+                        hex.update_element_rect()
+                        hex.update_element_image()
                         element: HexSpriteElement = hex.element()
                         target_rect = pg.Rect(element.rect.x - self.chunk_surface_topleft.x(), 
                                               element.rect.y - self.chunk_surface_topleft.y(),  
@@ -152,10 +156,10 @@ class HexView(pk.view.ScaledView):
             self.move_viewport(V2(DRAG_MOVE_FACTOR * mouse_diff[0], DRAG_MOVE_FACTOR * mouse_diff[1]))
             if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices will change next frame (as a result of a pan)
                 self.flags.request_update_in_camera = True
-                self.flags.request_hex_update_rect = True  # TODO chunk for chunk? only for new? YES
+                self.flags.request_hex_update_px = True  # TODO chunk for chunk? only for new? YES
                 self.flags.request_chunk_update_topleft_and_bottomright = True
                 self.flags.request_update_chunk_surface = True
-                self.flags.request_hex_update_image = True  # TODO chunk for chunk? only for new? YES
+                self.flags.request_hex_update_element = True  # TODO chunk for chunk? only for new? YES
         self.mouse_pos = new_mouse_pos
 
     def on_mouse_wheel(self, event: pg.event.Event) -> None:
@@ -178,9 +182,9 @@ class HexView(pk.view.ScaledView):
             self.flags.request_reset_scaled_store = True  # request for the sprites to be scaled
             if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
                 self.flags.request_update_in_camera = True
-            self.flags.request_hex_update_rect = True
+            self.flags.request_hex_update_px = True
             self.flags.request_chunk_update_topleft_and_bottomright = True  # topleft or bottomright of chunks always changes
-            self.flags.request_hex_update_image = True  # image always needs updating (to new scale)
+            self.flags.request_hex_update_element = True  # image always needs updating (to new scale)
             self.flags.request_update_chunk_surface = True  # chunk surface always changes
             self.flags.zoom_happened = True
 

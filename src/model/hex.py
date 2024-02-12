@@ -191,28 +191,23 @@ class Hex(pk.model.Model):
             
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
-        self._px: V2[int] = Ax.ax_to_px(self._ax)
 
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
         self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
 
-        pos: tuple[int, int] = (self._px.x() - round(Hex.dim.x() / 2), self._px.y() - round(Hex.dim.y() / 2));
+        px: V2[int] = Ax.ax_to_px(self._ax)
+        pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
         self._element: HexSpriteElement = HexSpriteElement(pos=pos, img=HexSpriteStore.scaled_store[self._sprite_idx])
 
     def ax(self) -> Ax:
         return self._ax
     
-    def px(self) -> V2[int]:
-        return self._px
-    
-    def reset_px(self) -> None:
-        self._px = Ax.ax_to_px(self._ax)
-    
     def element(self) -> HexSpriteElement:
         return self._element
     
     def update_element_rect(self) -> None:
-        self._element.rect.topleft = (self._px.x() - round(Hex.dim.x() / 2), self._px.y() - round(Hex.dim.y() / 2))
+        px: V2[int] = Ax.ax_to_px(self._ax)
+        self._element.rect.topleft = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2))
         self._element.rect.size = Hex.dim.get()
 
     def update_element_image(self) -> None:
@@ -221,7 +216,7 @@ class Hex(pk.model.Model):
         pass
 
     def __str__(self) -> str:
-        return "<Hex: ax = " + str(self._ax) + ", px = " + str(self._px) + ">"
+        return "<Hex: ax = " + str(self._ax) + ", px = " + str(Ax.ax_to_px(self._ax)) + ">"
     
 
 class HexChunk:
@@ -276,12 +271,12 @@ class HexChunk:
     def calc_topleft(self) -> V2[int]:
         hex: Hex | None = self._hexes[0][0]
         assert hex, "Chunk not filled"
-        return hex.px() - (Hex.dim // V2(2, 2))
+        return Ax.ax_to_px(hex.ax()) - (Hex.dim // V2(2, 2))
             
     def calc_bottomright(self,) -> V2[int]:
         hex: Hex | None = self._hexes[HEX_CHUNK_SIZE - 1][HEX_CHUNK_SIZE - 1]
         assert hex, "Chunk not filled"
-        return hex.px() + (Hex.dim // V2(2, 2))
+        return Ax.ax_to_px(hex.ax()) + (Hex.dim // V2(2, 2))
 
     def fill_chunk(self) -> None:
         for x in range(HEX_CHUNK_SIZE):
@@ -361,10 +356,10 @@ class HexStore:
         return self._in_camera
     
     def in_camera_topleft(self) -> V2[int]:
-        return self._chunks[self._in_camera.min_chunk_idx().x()][self._in_camera.min_chunk_idx().y()].topleft()
+        return self._chunks[self._in_camera.min_chunk_idx().x()][self._in_camera.min_chunk_idx().y()].calc_topleft()
     
     def in_camera_bottomright(self) -> V2[int]:
-        return self._chunks[self._in_camera.max_chunk_idx().x()][self._in_camera.max_chunk_idx().y()].bottomright()
+        return self._chunks[self._in_camera.max_chunk_idx().x()][self._in_camera.max_chunk_idx().y()].calc_bottomright()
 
     def update_in_camera(self, min_max_of: V2[V2[int]]) -> None:
         # get the chunk idx of the topleft (min) and bottomright (max) hexes on screen
@@ -402,30 +397,18 @@ class HexController(pk.model.Model):
     i: int = 0
 
     @staticmethod
-    def add_hex_to_view(hex_controller: "HexController", hex: Hex) -> None:
+    def add_hex_to_view(hex_controller: "HexController | None", hex: Hex) -> None:
+        assert hex_controller, "hex_controller = None"
         hex_controller._view.add(hex.element())
 
     @staticmethod
-    def update_rect(_: "HexController", hex: Hex) -> None:
-        # only update hex coordinates and element rect if: 
-        # 1. element rect size is not equal to new hex dimensions (after zoom)
-        # afterwards, coordinates are correctly adjusted and element rect has the right size until the next zoom takes place
+    def update_element(_: "HexController | None", hex: Hex) -> None:
         if V2(hex.element().rect.width, hex.element().rect.height) != Hex.dim:
-            hex.reset_px()
             hex.update_element_rect()
-
-    @staticmethod
-    def update_image(_: "HexController", hex: Hex) -> None:
-        # only update image if:
-        # 1. image size is not equal to size of element (meaning a zoom has taken place)
-        # 2. image is in frame (for the first time after a zoom)
-        # afterwards, image size is equal to rect size until the next zoom takes place
-        # image size is 1px larger because of rounding error gap mitigation (see update_element_image())
-        if V2(hex.element().rect.width, hex.element().rect.height) != V2(hex.element().image.get_width(), hex.element().image.get_height()):
             hex.update_element_image()
 
     @staticmethod
-    def update_topleft_and_bottomright(_: "HexController", chunk: HexChunk) -> None:
+    def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
         chunk.reset_bottomright()
             
@@ -456,20 +439,15 @@ class HexController(pk.model.Model):
             self._view.flags.request_update_in_camera = False
             self._store.update_in_camera(self._view.get_min_max_of())
 
-        if self._view.flags.request_hex_update_rect:
-            print("request_hex_update_rect", HexController.i)
-            self._view.flags.request_hex_update_rect = False
-            self.apply_to_all_hex_in_camera(HexController.update_rect)
+        # if self._view.flags.request_chunk_update_topleft_and_bottomright:
+        #     print("request_chunk_update_topleft_and_bottomright", HexController.i)
+        #     self._view.flags.request_chunk_update_topleft_and_bottomright = False
+        #     self.apply_to_all_chunk_in_camera(HexController.update_topleft_and_bottomright)
 
-        if self._view.flags.request_chunk_update_topleft_and_bottomright:
-            print("request_chunk_update_topleft_and_bottomright", HexController.i)
-            self._view.flags.request_chunk_update_topleft_and_bottomright = False
-            self.apply_to_all_chunk_in_camera(HexController.update_topleft_and_bottomright)
-
-        if self._view.flags.request_hex_update_image:
-            print("request_hex_update_image", HexController.i)
-            self._view.flags.request_hex_update_image = False
-            self.apply_to_all_hex_in_camera(HexController.update_image)
+        # if self._view.flags.request_hex_update_element:
+        #     print("request_hex_update_element", HexController.i)
+        #     self._view.flags.request_hex_update_element = False
+        #     self.apply_to_all_hex_in_camera(HexController.update_element)
 
         if self._view.flags.request_update_chunk_surface:
             print("request_update_chunk_surface", HexController.i)
@@ -482,22 +460,22 @@ class HexController(pk.model.Model):
 
         HexController.i += 1
         
-    def apply_to_all_hex_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
+    def apply_to_all_hex_in_store(self, f: Callable[["HexController | None", Hex], None]) -> None:
         for x in range(HEX_NOF_CHUNKS.x()):
             for y in range(HEX_NOF_CHUNKS.y()):
                 self.apply_to_all_hex_in_chunk(self._store.chunks()[x][y], f)
 
-    def apply_to_all_hex_in_camera(self, f: Callable[["HexController", Hex], None]) -> None:
+    def apply_to_all_hex_in_camera(self, f: Callable[["HexController | None", Hex], None]) -> None:
         for chunk in self._store.in_camera().chunks():
             self.apply_to_all_hex_in_chunk(chunk, f)
 
-    def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController", Hex], None]) -> None:
+    def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController | None", Hex], None]) -> None:
         for x in range(HEX_CHUNK_SIZE):
             for y in range(HEX_CHUNK_SIZE):
                 hex: Hex | None = chunk.get_hex(V2(x, y))
                 if isinstance(hex, Hex): f(self, hex)
 
-    def apply_to_all_chunk_in_camera(self, f: Callable[["HexController", HexChunk], None]) -> None:
+    def apply_to_all_chunk_in_camera(self, f: Callable[["HexController | None", HexChunk], None]) -> None:
         for chunk in self._store.in_camera().chunks():
             f(self, chunk)
 

@@ -46,6 +46,9 @@ class Game(pk.model.Model):
         if event.key == pg.K_q:
             pg.quit()
             sys.exit()
+        if event.key == pg.K_f:
+            self.min_fps = MAX_FRAMERATE
+            self.max_fps = 0
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)
