@@ -32,7 +32,7 @@ class V2(Generic[T]):
 
     def get(self) -> tuple[T, T]:
         return self._t
-    
+
     def a(self) -> T:
         return self._t[0]
     def b(self) -> T:

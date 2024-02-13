@@ -35,6 +35,4 @@ pynkie.set_debug_info(DEBUG_INFO)
 pynkie.set_max_framerate(MAX_FRAMERATE)
 pynkie.set_use_default_cursor(USE_DEFAULT_CURSOR)
                            
-    
-
 pynkie.run()

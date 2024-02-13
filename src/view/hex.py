@@ -5,7 +5,7 @@ from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR
+from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_INIT_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_INIT_NOF_CHUNKS, ZOOM_STEP_FACTOR
 
 
 class HexViewFlags():
@@ -53,9 +53,9 @@ class HexView(pk.view.ScaledView):
     
     def get_min_max_chunk_idx(self, min_max_of: V2[V2[int]]) -> V2[V2[int]]:
         min_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[0])
-        min_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0] - 1, max(0, min_chunk_idx[0])), min(HEX_NOF_CHUNKS[1] - 1, max(0, min_chunk_idx[1])))
+        min_chunk_idx_bounded: V2[int] = V2(min(HEX_INIT_NOF_CHUNKS[0] - 1, max(0, min_chunk_idx[0])), min(HEX_INIT_NOF_CHUNKS[1] - 1, max(0, min_chunk_idx[1])))
         max_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[1])
-        max_chunk_idx_bounded: V2[int] = V2(min(HEX_NOF_CHUNKS[0] - 1, max(0, max_chunk_idx[0])), min(HEX_NOF_CHUNKS[1] - 1, max(0, max_chunk_idx[1])))
+        max_chunk_idx_bounded: V2[int] = V2(min(HEX_INIT_NOF_CHUNKS[0] - 1, max(0, max_chunk_idx[0])), min(HEX_INIT_NOF_CHUNKS[1] - 1, max(0, max_chunk_idx[1])))
         return V2(min_chunk_idx_bounded, max_chunk_idx_bounded)
     
     def min_max_chunk_idx_will_change(self) -> bool:
@@ -81,7 +81,7 @@ class HexView(pk.view.ScaledView):
             self.chunks_to_be_drawn = self.chunks_to_be_drawn.union({c for c in in_camera.chunks() if c.y() < self.min_max_chunk_idx[0].y()})
             self.chunks_to_be_drawn = self.chunks_to_be_drawn.union({c for c in in_camera.chunks() if c.x() > self.min_max_chunk_idx[1].x()})
             self.chunks_to_be_drawn = self.chunks_to_be_drawn.union({c for c in in_camera.chunks() if c.y() > self.min_max_chunk_idx[1].y()})
-            old_chunk_surface: pg.Surface = self.chunk_surface.copy()  # TODO when zoomed in below code very costly! (surface BIG)
+            old_chunk_surface: pg.Surface = self.chunk_surface  # TODO when zoomed in below code very costly! (surface BIG)
             self.chunk_surface = pg.Surface(surface_size.get())
             topleft_diff: V2[int] = self.chunk_surface_topleft - topleft
             self.chunk_surface.blit(old_chunk_surface, topleft_diff.get())  # TODO until here
@@ -99,8 +99,8 @@ class HexView(pk.view.ScaledView):
             chunk.reset_topleft()
             chunk.reset_bottomright()
             print("update_and_add_single_chunk_to_surface", chunk.idx(), HexController.i)
-            for x in range (HEX_CHUNK_SIZE):
-                for y in range(HEX_CHUNK_SIZE):
+            for x in range (HEX_INIT_CHUNK_SIZE):
+                for y in range(HEX_INIT_CHUNK_SIZE):
                     hex: Hex | None = chunk.hexes()[x][y]
                     if hex:
                         hex.update_element_rect()
@@ -174,7 +174,7 @@ class HexView(pk.view.ScaledView):
         # if zoom happened
         if new_size != Hex.size:
             Hex.set_size(new_size)
-            HexChunk.set_size()
+            HexChunk.set_size_px()
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
