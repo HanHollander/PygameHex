@@ -5,16 +5,17 @@ from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_INIT_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_INIT_NOF_CHUNKS, ZOOM_STEP_FACTOR
+from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
 
 
 class HexViewFlags():
 
     def __init__(self) -> None:
-        self.request_reset_scaled_store = True
+        self.request_reset_chunks = False
+        self.request_reset_scaled_store = False
         self.request_update_in_camera = True
         self.request_update_chunk_surface = True
-        self.request_update_and_add_single_chunk_to_surface = False
+        self.request_update_and_add_single_chunk_to_surface = True
 
         self.pan_happened = False
         self.zoom_happened = False
@@ -53,9 +54,9 @@ class HexView(pk.view.ScaledView):
     
     def get_min_max_chunk_idx(self, min_max_of: V2[V2[int]]) -> V2[V2[int]]:
         min_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[0])
-        min_chunk_idx_bounded: V2[int] = V2(min(HEX_INIT_NOF_CHUNKS[0] - 1, max(0, min_chunk_idx[0])), min(HEX_INIT_NOF_CHUNKS[1] - 1, max(0, min_chunk_idx[1])))
+        min_chunk_idx_bounded: V2[int] = V2(min(HexStore.nof_chunks[0] - 1, max(0, min_chunk_idx[0])), min(HexStore.nof_chunks[1] - 1, max(0, min_chunk_idx[1])))
         max_chunk_idx: V2[int] = HexStore.of_to_chunk_idx(min_max_of[1])
-        max_chunk_idx_bounded: V2[int] = V2(min(HEX_INIT_NOF_CHUNKS[0] - 1, max(0, max_chunk_idx[0])), min(HEX_INIT_NOF_CHUNKS[1] - 1, max(0, max_chunk_idx[1])))
+        max_chunk_idx_bounded: V2[int] = V2(min(HexStore.nof_chunks[0] - 1, max(0, max_chunk_idx[0])), min(HexStore.nof_chunks[1] - 1, max(0, max_chunk_idx[1])))
         return V2(min_chunk_idx_bounded, max_chunk_idx_bounded)
     
     def min_max_chunk_idx_will_change(self) -> bool:
@@ -96,11 +97,12 @@ class HexView(pk.view.ScaledView):
         chunk_nr: int = 0
         while len(self.chunks_to_be_drawn) > 0 and chunk_nr < CHUNKS_PER_FRAME:
             chunk: HexChunk = self.chunks_to_be_drawn.pop()
+            if not chunk.filled(): chunk.fill()
             chunk.reset_topleft()
             chunk.reset_bottomright()
             print("update_and_add_single_chunk_to_surface", chunk.idx(), HexController.i)
-            for x in range (HEX_INIT_CHUNK_SIZE):
-                for y in range(HEX_INIT_CHUNK_SIZE):
+            for x in range (HexChunk.nof_hexes):
+                for y in range(HexChunk.nof_hexes):
                     hex: Hex | None = chunk.hexes()[x][y]
                     if hex:
                         hex.update_element_rect()
@@ -173,14 +175,23 @@ class HexView(pk.view.ScaledView):
 
         # if zoom happened
         if new_size != Hex.size:
+            if scale > 1.:  # chunks smaller (zoom in)
+                if HexChunk.set_nof_hexes(HexChunk.nof_hexes // int(ZOOM_STEP_FACTOR)):
+                    HexStore.set_nof_chunks(HexStore.nof_chunks * V2(int(ZOOM_STEP_FACTOR), int(ZOOM_STEP_FACTOR)))
+                    self.flags.request_reset_chunks = True
+            elif scale < 1.:  # chunks bigger (zoom out)
+                if HexChunk.set_nof_hexes(HexChunk.nof_hexes * int(ZOOM_STEP_FACTOR)):
+                    HexStore.set_nof_chunks(HexStore.nof_chunks // V2(int(ZOOM_STEP_FACTOR), int(ZOOM_STEP_FACTOR)))
+                    self.flags.request_reset_chunks = True
+
             Hex.set_size(new_size)
             HexChunk.set_size_px()
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
             self.flags.request_reset_scaled_store = True  # request for the sprites to be scaled
-            if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
-                self.flags.request_update_in_camera = True
+            # if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
+            self.flags.request_update_in_camera = True
             self.flags.request_update_chunk_surface = True  # chunk surface always changes
             self.flags.zoom_happened = True
 

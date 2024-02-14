@@ -17,10 +17,11 @@ class HexOrientation(Enum):
     FLAT = 1
     POINTY = 2
 HEX_INIT_SIZE: int = 256
-HEX_INIT_CHUNK_SIZE: int = 2
-HEX_MIN_CHUNK_SIZE: int = 2
+HEX_INIT_NOF_HEXES_IN_CHUNK: int = 2
+HEX_INIT_CHUNK_OVERFLOW = -2
+HEX_MIN_CHUNK_SIZE: int = 4
 HEX_MAX_CHUNK_SIZE: int = 16
-HEX_INIT_NOF_CHUNKS: V2[int] = V2(24, 16)
+HEX_INIT_NOF_CHUNKS_IN_STORE: V2[int] = V2(128, 80)
 HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
 
 # hex view
@@ -29,4 +30,4 @@ HEX_MIN_SIZE: int = 2
 HEX_MAX_SIZE: int = 128
 ZOOM_STEP_FACTOR: float = 2
 ZOOM_MOVE_FACTOR: float = .5
-CHUNKS_PER_FRAME: int = 4
+CHUNKS_PER_FRAME: int = 1

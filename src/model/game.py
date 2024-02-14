@@ -15,7 +15,6 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.store().fill_store()
         self.min_fps: int = MAX_FRAMERATE
         self.max_fps: int = 0
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
