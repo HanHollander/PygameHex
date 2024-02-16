@@ -4,8 +4,8 @@ import pynkie as pk
 import numpy as np
 
 from math import ceil, floor, sqrt, cos, sin, pi
-from util import V2, V3
-from config import HEX_CHUNK_SIZE, HEX_INIT_SIZE, HEX_ORIENTATION, HEX_NOF_CHUNKS, ZOOM_STEP_FACTOR, HexOrientation
+from util import V2, V3, even
+from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_CHUNK_SIZE, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, HEX_ORIENTATION, HEX_INIT_STORE_SIZE, ZOOM_STEP_FACTOR, HexOrientation
 
 if TYPE_CHECKING:
     from view.hex import HexView
@@ -81,9 +81,9 @@ class Ax:
     def ax_to_of(ax: "Ax") -> V2[int]:  # odd-r
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return V2(ax.q(), round(ax.r() + (ax.q() - (ax.q()&1)) / 2))
+                return V2(ax.q(), ax.r() + round((ax.q() - (ax.q()&1)) / 2))
             case HexOrientation.POINTY:
-                return V2(round(ax.q() + (ax.r() - (ax.r()&1)) / 2), ax.r())
+                return V2(ax.q() + round((ax.r() - (ax.r()&1)) / 2), ax.r())
             
     @staticmethod
     def of_to_ax(of: V2[int]) -> "Ax":  # odd-q
@@ -140,7 +140,7 @@ class HexSpriteStore:
                 pg.draw.polygon(surface, color, [(x + r * cos(2 * pi * i / 6 + 2 * pi / 12), y + r * sin(2 * pi * i / 6 + 2 * pi / 12)) for i in range(6)], width)
 
     @staticmethod
-    def make_surface(of: V2[int], draw_center: bool = True) -> pg.Surface:
+    def make_surface(of: V2[int], dim: V2[int], draw_border: bool = False, draw_center: bool = False) -> pg.Surface:
         ax: Ax = Ax.of_to_ax(of)
         rgb: list[int] = [abs((63 * ax.q() + 82) % 255), 
                           abs((187 * ax.r() + 43) % 255), 
@@ -148,23 +148,24 @@ class HexSpriteStore:
         rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
         surface = pg.Surface((Hex.dim.x(), Hex.dim.y()), pg.SRCALPHA)
         HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 0)
-        HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 5)
+        if draw_border:
+            HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 5)
         if draw_center:
             pg.draw.circle(surface, rgb_inv, [Hex.dim.x() / 2, Hex.dim.y() / 2], 20)
         return surface
 
     @staticmethod
     def init_store() -> None:
-        HexSpriteStore._store = [HexSpriteStore.make_surface(V2(i, j)) for i in range(10) for j in range(10)]
-        HexSpriteStore._store[0] = HexSpriteStore.make_surface(V2(3, 3))  # test hex
+        dim: V2[int] = Hex.calc_dim_from_size(HEX_INIT_SPRITE_SIZE)[0]
+        HexSpriteStore._store = [HexSpriteStore.make_surface(V2(i, j), dim) for i in range(10) for j in range(10)]
+        HexSpriteStore._store[0] = HexSpriteStore.make_surface(V2(3, 3), dim)  # test hex
         for sprite in HexSpriteStore._store:
             HexSpriteStore.scaled_store.append(sprite.copy())
 
     @staticmethod
     def reset_scaled_store() -> None:
         for i in range(len(HexSpriteStore.scaled_store)):
-            # scale to new size + 1px padding (to avoid rounding gaps)
-            HexSpriteStore.scaled_store[i] =  pg.transform.scale(HexSpriteStore._store[i], (Hex.dim[0] + 1, Hex.dim[1] + 1))
+            HexSpriteStore.scaled_store[i] =  pg.transform.scale(HexSpriteStore._store[i], (Hex.dim[0], Hex.dim[1]))
 
 
 class Hex(pk.model.Model):
@@ -173,126 +174,168 @@ class Hex(pk.model.Model):
     size: int  # "radius" of the hex (center to vertex)
     dim: V2[int]  # width and height of the hex
     dim_float: V2[float]
-    spacing: V2[int]  # distance between centers of hexes
-    spacing_float: V2[float]
     orientation: HexOrientation  # pointy or flat top
 
     @staticmethod
     def calc_dim() -> tuple[V2[int], V2[float]]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return (V2(Hex.size * 2, round(sqrt(3) * Hex.size)), V2(Hex.size * 2, sqrt(3) * Hex.size))
+                return (V2(Hex.size * 2, even(round(sqrt(3) * Hex.size))), V2(Hex.size * 2, sqrt(3) * Hex.size))
             case HexOrientation.POINTY:
-                return (V2(round(sqrt(3) * Hex.size), Hex.size * 2), V2(sqrt(3) * Hex.size, Hex.size * 2))
-            
+                return (V2(even(round(sqrt(3) * Hex.size)), Hex.size * 2), V2(sqrt(3) * Hex.size, Hex.size * 2))
+        
     @staticmethod
-    def calc_spacing() -> tuple[V2[int], V2[float]]:
+    def calc_dim_from_size(size: int) -> tuple[V2[int], V2[float]]:
         match Hex.orientation:
             case HexOrientation.FLAT:
-                return (V2(round(Hex.size * (3/2)), round(sqrt(3) * Hex.size)), V2(Hex.size * (3/2), sqrt(3) * Hex.size))
+                return (V2(size * 2, even(round(sqrt(3) * size))), V2(size * 2, sqrt(3) * size))
             case HexOrientation.POINTY:
-                return (V2(round(sqrt(3) * Hex.size), round(Hex.size * (3/2))), V2(sqrt(3) * Hex.size, Hex.size * (3/2)))
+                return (V2(even(round(sqrt(3) * size)), size * 2), V2(sqrt(3) * size, size * 2))
             
     @staticmethod
     def set_size(size: int) -> None:
         Hex.size = size
         Hex.dim, Hex.dim_float = Hex.calc_dim()
-        Hex.spacing, Hex.spacing_float = Hex.calc_spacing()
         Hex.size_updated = True
             
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
-        self._px: V2[int] = Ax.ax_to_px(self._ax)
 
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
-        self._sprite_idx: int = chunk_idx.x() + 6325 * chunk_idx.y() % len(HexSpriteStore.scaled_store)
+        self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
 
-        pos: tuple[int, int] = (self._px.x() - int(Hex.dim.x() / 2), self._px.y() - int(Hex.dim.y() / 2));
+        px: V2[int] = Ax.ax_to_px(self._ax)
+        pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
         self._element: HexSpriteElement = HexSpriteElement(pos=pos, img=HexSpriteStore.scaled_store[self._sprite_idx])
 
     def ax(self) -> Ax:
         return self._ax
     
-    def px(self) -> V2[int]:
-        return self._px
-    
-    def reset_px(self) -> None:
-        self._px = Ax.ax_to_px(self._ax)
-    
     def element(self) -> HexSpriteElement:
         return self._element
     
     def update_element_rect(self) -> None:
-        self._element.rect.topleft = (self._px.x() - int(Hex.dim.x() / 2), self._px.y() - int(Hex.dim.y() / 2))
+        px: V2[int] = Ax.ax_to_px(self._ax)
+        self._element.rect.topleft = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2))
         self._element.rect.size = Hex.dim.get()
 
     def update_element_image(self) -> None:
+        chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
+        self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
         self._element.image = HexSpriteStore.scaled_store[self._sprite_idx]
         # self._element.image = pg.transform.scale(HexSpriteStore._store[self._sprite_idx], (self._element.rect.width + 1, self._element.rect.height + 1))
         pass
 
     def __str__(self) -> str:
-        return "<Hex: ax = " + str(self._ax) + ", px = " + str(self._px) + ">"
+        return "<Hex: ax = " + str(self._ax) + ", px = " + str(Ax.ax_to_px(self._ax)) + ">"
     
 
 class HexChunk:
 
     # static class variables:
-    size: V2[int]
+    size_px: V2[int]
+    nof_hexes: int = HEX_INIT_CHUNK_SIZE
+    size_overflow: int = 0
 
     @staticmethod
-    def set_size() -> None:
-        assert HEX_CHUNK_SIZE > 1
+    def set_size_px() -> None:
+        assert HexChunk.nof_hexes > 1
         match Hex.orientation:
             case HexOrientation.FLAT:
-                w: int = round((HEX_CHUNK_SIZE - ((HEX_CHUNK_SIZE - 1)* (1/4))) * Hex.dim.x())
-                h: int = round((HEX_CHUNK_SIZE + (1/2)) * Hex.dim.y())
+                w: int = round((HexChunk.nof_hexes - ((HexChunk.nof_hexes - 1) * (1/4))) * Hex.dim.x())
+                h: int = round((HexChunk.nof_hexes + (1/2)) * Hex.dim.y())
             case HexOrientation.POINTY:
-                w: int = round((HEX_CHUNK_SIZE + (1/2)) * Hex.dim.x())
-                h: int = round((HEX_CHUNK_SIZE - ((HEX_CHUNK_SIZE - 1) * (1/4))) * Hex.dim.y())
-        HexChunk.size = V2(w, h)
+                w: int = round((HexChunk.nof_hexes + (1/2)) * Hex.dim.x())
+                h: int = round((HexChunk.nof_hexes - ((HexChunk.nof_hexes - 1) * (1/4))) * Hex.dim.y())
+        HexChunk.size_px = V2(w, h)
+
+    @staticmethod
+    def set_nof_hexes(nof_hexes: int) -> bool:
+        # return true if changed
+        # only change if within bounds and no overflow
+        smaller: bool = nof_hexes < HexChunk.nof_hexes
+        bigger: bool = nof_hexes > HexChunk.nof_hexes
+
+        old_nof_hexes: int = HexChunk.nof_hexes
+        if HexChunk.size_overflow == 0:  # only if no overflow attempt to change
+            HexChunk.nof_hexes = min(HEX_MAX_CHUNK_SIZE, max(HEX_MIN_CHUNK_SIZE, nof_hexes))
+
+        if old_nof_hexes != HexChunk.nof_hexes:
+            return True
+        else:  # size dit not change
+            if smaller: HexChunk.size_overflow -= 1
+            if bigger: HexChunk.size_overflow += 1
+            return False
+        
+    @staticmethod
+    def set_size_overflow(size_overflow: int) -> None:
+        HexChunk.size_overflow: int = size_overflow
 
     @staticmethod
     def of_to_hex_idx(of: V2[int]) -> V2[int]:
-        return V2(of.x() % HEX_CHUNK_SIZE, of.y() % HEX_CHUNK_SIZE)
+        return V2(of.x() % HexChunk.nof_hexes, of.y() % HexChunk.nof_hexes)
 
-    def __init__(self, idx: V2[int]) -> None:
-        HexChunk.set_size()
+    def __init__(self, idx: V2[int], parent_store: "HexStore") -> None:
+        self._parent_store: HexStore = parent_store
         self._idx: V2[int] = idx
-        self._topleft: V2[int] = self.calc_topleft()
-        self._hexes: list[list[Hex | None]] = [[None for _ in range(HEX_CHUNK_SIZE)] for _ in range(HEX_CHUNK_SIZE)]
+        self._hexes: list[list[Hex | None]] = [[None for _ in range(HexChunk.nof_hexes)] for _ in range(HexChunk.nof_hexes)]
+        self._updated: bool = False
+        self._filled: bool = False
+        self._topleft: V2[int] = V2(0, 0)
+        self._bottomright: V2[int] = V2(0, 0)
 
     def x(self) -> int:
         return self._idx.x()
     
     def y(self) -> int: 
         return self._idx.y()
+    
+    def idx(self) -> V2[int]:
+        return self._idx
 
     def topleft(self) -> V2[int]:
         return self._topleft
     
+    def bottomright(self) -> V2[int]:
+        return self._bottomright
+    
     def reset_topleft(self) -> None:
         self._topleft = self.calc_topleft()
+
+    def reset_bottomright(self) -> None:
+        self._bottomright = self.calc_bottomright()
 
     def hexes(self) -> list[list[Hex | None]]:
         return self._hexes
     
-    def calc_topleft(self) -> V2[int]:
-        match Hex.orientation:
-            case HexOrientation.FLAT:
-                return V2(round(self._idx.x() * HexChunk.size.x() - Hex.dim.x() / 2 - self._idx.x() * Hex.dim.x() / 4),
-                          round(self._idx.y() * HexChunk.size.y() - (self._idx.y() + 1) * Hex.dim.y() / 2))
-            case HexOrientation.POINTY:
-                return V2(round(self._idx.x() * HexChunk.size.x() - (self._idx.x() + 1) * Hex.dim.x() / 2), 
-                        round(self._idx.y() * HexChunk.size.y() - Hex.dim.y() / 2 - self._idx.y() * Hex.dim.y() / 4))
+    def updated(self) -> bool:
+        return self._updated
+    
+    def set_updated(self, updated: bool) -> None:
+        self._updated = updated
 
-    def fill_chunk(self) -> None:
-        for x in range(HEX_CHUNK_SIZE):
-            for y in range(HEX_CHUNK_SIZE):
-                of_x: int = HEX_CHUNK_SIZE * self._idx.x() + x
-                of_y: int = HEX_CHUNK_SIZE * self._idx.y() + y
-                ax: Ax = Ax.of_to_ax(V2(of_x, of_y))
-                self._hexes[x][y] = Hex(ax.q(), ax.r())
+    def filled(self) -> bool:
+        return self._filled
+    
+    def set_filled(self, filled: bool) -> None:
+        self._filled = filled
+    
+    def fill(self) -> None:
+        self._parent_store.fill_chunk(self._idx)
+    
+    def calc_topleft(self) -> V2[int]:
+        hex: Hex | None = self._hexes[0][0]
+        if not hex:
+            hex_idx: V2[int] = self._idx * V2(HexChunk.nof_hexes, HexChunk.nof_hexes)
+            hex = self._parent_store.hexes()[hex_idx.x()][hex_idx.y()]
+        return Ax.ax_to_px(hex.ax()) - (Hex.dim // V2(2, 2))
+            
+    def calc_bottomright(self,) -> V2[int]:
+        hex: Hex | None = self._hexes[HexChunk.nof_hexes - 1][HexChunk.nof_hexes - 1]
+        if not hex:
+            hex_idx: V2[int] = (self._idx * V2(HexChunk.nof_hexes, HexChunk.nof_hexes)) + V2(HexChunk.nof_hexes - 1, HexChunk.nof_hexes - 1)
+            hex = self._parent_store.hexes()[hex_idx.x()][hex_idx.y()]
+        return Ax.ax_to_px(hex.ax()) + (Hex.dim // V2(2, 2))
 
     def get_hex(self, idx: V2[int]) -> Hex | None:
         return self._hexes[idx.x()][idx.y()]
@@ -330,8 +373,8 @@ class HexChunkSet:
         self._chunks = {c for c in self._chunks if c.y() > self._max_chunk_idx.y()}
 
     def add_chunks(self, chunks: list[list[HexChunk]]) -> None:
-        for x in range(max(0, self._min_chunk_idx.x()), min(self._max_chunk_idx.x() + 1, HEX_NOF_CHUNKS[0])):
-            for y in range(max(0, self._min_chunk_idx.y()), min(self._max_chunk_idx.y() + 1, HEX_NOF_CHUNKS[1])):
+        for x in range(max(0, self._min_chunk_idx.x()), min(self._max_chunk_idx.x() + 1, HexStore.nof_chunks[0])):
+            for y in range(max(0, self._min_chunk_idx.y()), min(self._max_chunk_idx.y() + 1, HexStore.nof_chunks[1])):
                 self._chunks.add(chunks[x][y])
 
     def set_min_chunk_idx(self, min_chunk_idx: V2[int]) -> None:
@@ -341,22 +384,39 @@ class HexChunkSet:
         self._max_chunk_idx = max_chunk_idx
 
     def set_nof_chunks(self) -> None:
-        nof_chunks_x: int = min(self._max_chunk_idx[0] + 1, HEX_NOF_CHUNKS[0]) - max(0, self._min_chunk_idx[0])
-        nof_chunks_y: int = min(self._max_chunk_idx[1] + 1, HEX_NOF_CHUNKS[1]) - max(0, self._min_chunk_idx[1])
+        nof_chunks_x: int = min(self._max_chunk_idx[0] + 1, HexStore.nof_chunks[0]) - max(0, self._min_chunk_idx[0])
+        nof_chunks_y: int = min(self._max_chunk_idx[1] + 1, HexStore.nof_chunks[1]) - max(0, self._min_chunk_idx[1])
         self._nof_chunks = V2(nof_chunks_x, nof_chunks_y)
-        pk.debug.debug["nof chunks"] = self._nof_chunks
     
 
 class HexStore:
-    i: int
+
+    # static class variables
+    nof_chunks: V2[int]
+
+    @staticmethod
+    def set_nof_chunks(nof_chunks: V2[int]) -> None:
+        HexStore.nof_chunks = nof_chunks
 
     @staticmethod
     def of_to_chunk_idx(of: V2[int]) -> V2[int]:
-        return V2(floor(of.x() / HEX_CHUNK_SIZE), floor(of.y() / HEX_CHUNK_SIZE))
+        return V2(floor(of.x() / HexChunk.nof_hexes), floor(of.y() / HexChunk.nof_hexes))
 
     def __init__(self) -> None:
-        self._chunks: list[list[HexChunk]] = [[HexChunk(V2(x, y)) for y in range(HEX_NOF_CHUNKS.y())] for x in range (HEX_NOF_CHUNKS.x())]
+        HexStore.set_nof_chunks(HEX_INIT_STORE_SIZE)
+        HexChunk.nof_hexes = HEX_INIT_CHUNK_SIZE
+
+        assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == HEX_NOF_HEXES
+
+        HexChunk.set_size_overflow(HEX_INIT_CHUNK_OVERFLOW)
+        HexChunk.set_size_px()
+
+        self._hexes: list[list[Hex]] = [[Hex(Ax.of_to_ax(V2(x, y)).q(), Ax.of_to_ax(V2(x, y)).r()) for y in range(HexStore.nof_chunks.y() * HexChunk.nof_hexes)] for x in range(HexStore.nof_chunks.x() * HexChunk.nof_hexes)]
+        self._chunks: list[list[HexChunk]] = [[HexChunk(V2(x, y), self) for y in range(HexStore.nof_chunks.y())] for x in range (HexStore.nof_chunks.x())]
         self._in_camera: HexChunkSet = HexChunkSet()
+
+    def hexes(self) -> list[list[Hex]]:
+        return self._hexes
 
     def chunks(self) -> list[list[HexChunk]]:
         return self._chunks
@@ -365,7 +425,10 @@ class HexStore:
         return self._in_camera
     
     def in_camera_topleft(self) -> V2[int]:
-        return self._chunks[self._in_camera.min_chunk_idx().x()][self._in_camera.min_chunk_idx().y()].topleft()
+        return self._chunks[self._in_camera.min_chunk_idx().x()][self._in_camera.min_chunk_idx().y()].calc_topleft()
+    
+    def in_camera_bottomright(self) -> V2[int]:
+        return self._chunks[self._in_camera.max_chunk_idx().x()][self._in_camera.max_chunk_idx().y()].calc_bottomright()
 
     def update_in_camera(self, min_max_of: V2[V2[int]]) -> None:
         # get the chunk idx of the topleft (min) and bottomright (max) hexes on screen
@@ -374,7 +437,7 @@ class HexStore:
         # if chunks in camera have changed, update the in-camera set
         if min_chunk_idx != self._in_camera.min_chunk_idx() or max_chunk_idx != self._in_camera.max_chunk_idx():
             self._in_camera.set_min_chunk_idx(V2(max(0, min_chunk_idx.x()), max(0, min_chunk_idx.y())))
-            self._in_camera.set_max_chunk_idx(V2(min(HEX_NOF_CHUNKS.x(), max_chunk_idx.x()), min(HEX_NOF_CHUNKS.y(), max_chunk_idx.y())))
+            self._in_camera.set_max_chunk_idx(V2(min(HexStore.nof_chunks.x() - 1, max_chunk_idx.x()), min(HexStore.nof_chunks.y() - 1, max_chunk_idx.y())))
             # set the nof chunks in camera based on min/max indices
             self._in_camera.set_nof_chunks()
             # remove and add chunks as needed
@@ -382,61 +445,64 @@ class HexStore:
             self._in_camera.add_chunks(self._chunks)
                 
     def get_hex_at_of(self, of: V2[int]) -> Hex | None:
-        chunk_idx: V2[int] = HexStore.of_to_chunk_idx(of)
-        chunk: HexChunk | None = self.get_chunk(chunk_idx)
-        hex: Hex | None = None
-        if isinstance(chunk, HexChunk):
-            hex_idx: V2[int] = HexChunk.of_to_hex_idx(of)
-            hex = chunk.get_hex(hex_idx)
-        return hex
-
-    def fill_store(self) -> None:
+        if of.x() < 0 or of.x() >= len(self._hexes) or of.y() < 0 or of.y() >= len(self._hexes[0]):
+            return None
+        return self._hexes[of.x()][of.y()]
+    
+    def reset_chunks(self) -> None:
+        # also resets chunk._updated for every chunk
+        self._chunks: list[list[HexChunk]] = [[HexChunk(V2(x, y), self) for y in range(HexStore.nof_chunks.y())] for x in range (HexStore.nof_chunks.x())]
+    
+    def reset_chunk_update_status(self) -> None:
         for i in range(len(self._chunks)):
             for j in range(len(self._chunks[i])):
-                self._chunks[i][j].fill_chunk()
+                self._chunks[i][j].set_updated(False)
 
-    def get_chunk(self, idx: V2[int]) -> HexChunk | None:
-        return None if (idx.x() < 0 or idx.x() >= HEX_NOF_CHUNKS.x() or idx.y() < 0 or idx.y() >= HEX_NOF_CHUNKS.y()) else self._chunks[idx.x()][idx.y()]
+    def fill_chunk(self, chunk_idx: V2[int]) -> None:
+        min_hex_range: V2[int] = V2(chunk_idx.x() * HexChunk.nof_hexes, chunk_idx.y() * HexChunk.nof_hexes)
+        max_hex_range: V2[int] = min_hex_range + V2(HexChunk.nof_hexes, HexChunk.nof_hexes)
+        for i in range(min_hex_range.x(), max_hex_range.x()):
+            for j in range(min_hex_range.y(), max_hex_range.y()):
+                hex: Hex = self._hexes[i][j]
+                hex_idx: V2[int] = HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax()))
+                self._chunks[chunk_idx.x()][chunk_idx.y()].hexes()[hex_idx.x()][hex_idx.y()] = hex
+
+    def fill_chunks(self) -> None:
+        # assume new size of chunk and nof chunks has been set
+        for i in range(len(self._chunks)):
+            for j in range(len(self._chunks[i])):
+                self.fill_chunk(V2(i, j))
     
 
 class HexController(pk.model.Model):
     i: int = 0
 
     @staticmethod
-    def add_hex_to_view(hex_controller: "HexController", hex: Hex) -> None:
+    def add_hex_to_view(hex_controller: "HexController | None", hex: Hex) -> None:
+        assert hex_controller, "hex_controller = None"
         hex_controller._view.add(hex.element())
 
     @staticmethod
-    def update_rect(_: "HexController", hex: Hex) -> None:
-        # only update hex coordinates and element rect if: 
-        # 1. element rect size is not equal to new hex dimensions (after zoom)
-        # afterwards, coordinates are correctly adjusted and element rect has the right size until the next zoom takes place
+    def update_element(_: "HexController | None", hex: Hex) -> None:
         if V2(hex.element().rect.width, hex.element().rect.height) != Hex.dim:
-            hex.reset_px()
             hex.update_element_rect()
-
-    @staticmethod
-    def update_image(_: "HexController", hex: Hex) -> None:
-        # only update image if:
-        # 1. image size is not equal to size of element (meaning a zoom has taken place)
-        # 2. image is in frame (for the first time after a zoom)
-        # afterwards, image size is equal to rect size until the next zoom takes place
-        # image size is 1px larger because of rounding error gap mitigation (see update_element_image())
-        if V2(hex.element().rect.width + 1, hex.element().rect.height + 1) != V2(hex.element().image.get_width(), hex.element().image.get_height()):
             hex.update_element_image()
 
     @staticmethod
-    def update_topleft(_: "HexController", chunk: HexChunk) -> None:
+    def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
+        chunk.reset_bottomright()
             
     def __init__(self, view: "HexView") -> None:
         pk.model.Model.__init__(self)
         # init Hex, HexSpriteStore, HexView and HexStore
         Hex.orientation = HEX_ORIENTATION
-        Hex.set_size(HEX_INIT_SIZE)
+        Hex.set_size(HEX_MAX_SIZE)
         HexSpriteStore.init_store()
         self._view: "HexView" = view
         self._store: HexStore = HexStore()
+        self._store.fill_chunks()
+        # self._view.min_max_chunk_idx = self._view.get_min_max_chunk_idx(self._view.get_min_max_of())
         self.apply_to_all_hex_in_store(HexController.add_hex_to_view)
         
     def store(self) -> HexStore:
@@ -445,47 +511,53 @@ class HexController(pk.model.Model):
     def update(self, dt: float) -> None:
         pk.model.Model.update(self, dt)
 
-        if self._view.request_sprite_store_update:
-            print("reset scaled store", HexController.i)
+        if self._view.flags.request_reset_chunks:
+            print(HexController.i, "request_reset_chunks")
+            self._view.flags.request_reset_chunks = False
+            self._store.reset_chunks()
+
+        if self._view.flags.request_reset_chunk_update_status:
+            print(HexController.i, "request reset chunk update status")
+            self._view.flags.request_reset_chunk_update_status = False
+            self._store.reset_chunk_update_status()
+
+        if self._view.flags.request_reset_scaled_store:
+            print(HexController.i, "request_reset_scaled_store")
+            self._view.flags.request_reset_scaled_store = False
             HexSpriteStore.reset_scaled_store()
 
-        if self._view.request_chunk_surface_update:
-            print("update the in-camera chunk set", HexController.i)
+        if self._view.flags.request_update_in_camera:
+            print(HexController.i, "request_update_in_camera")
+            self._view.flags.request_update_in_camera = False
             self._store.update_in_camera(self._view.get_min_max_of())
-        
-        if self._view.request_chunk_surface_update or self._view.request_position_update:
-            print("update hex and chunk postions and sizes", HexController.i)
-            self.apply_to_all_hex_in_camera(HexController.update_rect)
-            self.apply_to_all_chunk_in_camera(HexController.update_topleft)
-            if self._view.request_chunk_surface_update:
-                print("update hex images", HexController.i)
-                self.apply_to_all_hex_in_camera(HexController.update_image)
-        
-        if self._view.request_chunk_surface_update:
-            print("update chunk surface", HexController.i)
-            self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft())
 
-        self._view.request_sprite_store_update = False
-        self._view.request_position_update = False
-        self._view.request_chunk_surface_update = False
+        if self._view.flags.request_update_chunk_surface:
+            print(HexController.i, "request_update_chunk_surface")
+            self._view.flags.request_update_chunk_surface = False
+            self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
+
+        if self._view.flags.request_update_and_add_single_chunk_to_surface:
+            # flag gets reset by view
+            self._view.update_and_add_single_chunk_to_surface()
+
         HexController.i += 1
         
-    def apply_to_all_hex_in_store(self, f: Callable[["HexController", Hex], None]) -> None:
-        for x in range(HEX_NOF_CHUNKS.x()):
-            for y in range(HEX_NOF_CHUNKS.y()):
-                self.apply_to_all_hex_in_chunk(self._store.chunks()[x][y], f)
+    def apply_to_all_hex_in_store(self, f: Callable[["HexController | None", Hex], None]) -> None:
+        for x in range(len(self._store.hexes())):
+            for y in range(len(self._store.hexes()[x])):
+                f(self, self._store.hexes()[x][y])
 
-    def apply_to_all_hex_in_camera(self, f: Callable[["HexController", Hex], None]) -> None:
+    def apply_to_all_hex_in_camera(self, f: Callable[["HexController | None", Hex], None]) -> None:
         for chunk in self._store.in_camera().chunks():
             self.apply_to_all_hex_in_chunk(chunk, f)
 
-    def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController", Hex], None]) -> None:
-        for x in range(HEX_CHUNK_SIZE):
-            for y in range(HEX_CHUNK_SIZE):
+    def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController | None", Hex], None]) -> None:
+        for x in range(HEX_INIT_CHUNK_SIZE):
+            for y in range(HEX_INIT_CHUNK_SIZE):
                 hex: Hex | None = chunk.get_hex(V2(x, y))
                 if isinstance(hex, Hex): f(self, hex)
 
-    def apply_to_all_chunk_in_camera(self, f: Callable[["HexController", HexChunk], None]) -> None:
+    def apply_to_all_chunk_in_camera(self, f: Callable[["HexController | None", HexChunk], None]) -> None:
         for chunk in self._store.in_camera().chunks():
             f(self, chunk)
 

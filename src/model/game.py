@@ -1,4 +1,5 @@
 import sys
+from config import MAX_FRAMERATE, HexOrientation
 import pygame as pg
 import pynkie as pk
 
@@ -14,14 +15,20 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.hex_controller.store().fill_store()
+        self.min_fps: int = MAX_FRAMERATE
+        self.max_fps: int = 0
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
     def update(self, dt: float) -> None:
+        if dt > 0:
+            fps: int = round(1 / dt)
+            if fps < self.min_fps: self.min_fps = fps
+            if fps > self.max_fps: self.max_fps = fps
+        pk.debug.debug["FPS min/max"] = (self.min_fps, self.max_fps)
         pk.debug.debug["Hex size"] = Hex.size
         pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
-        pk.debug.debug["Hex spacing (int, float)"] = [Hex.spacing, Hex.spacing_float]
-        pk.debug.debug["Chunk size"] = HexChunk.size
+        pk.debug.debug["Chunk size"] = HexChunk.size_px
+        pk.debug.debug["Zoom overflow"] = HexChunk.size_overflow
 
     def handle_event(self, event: pg.event.Event) -> None:
         pk.model.Model.handle_event(self, event)
@@ -39,6 +46,9 @@ class Game(pk.model.Model):
         if event.key == pg.K_q:
             pg.quit()
             sys.exit()
+        if event.key == pg.K_f:
+            self.min_fps = MAX_FRAMERATE
+            self.max_fps = 0
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)
@@ -49,8 +59,10 @@ class Game(pk.model.Model):
         hex: Hex | None = self.hex_controller.get_hex_at_px(pos, offset)
         pk.debug.debug["Camera offset"] = offset
         if hex:
-            pk.debug.debug["Hex indices (ax, of, px)"] = \
-                [hex.ax().c, Ax.ax_to_of(hex.ax()), Ax.ax_to_px(hex.ax())]
+            pk.debug.debug["Hex indices (ax, of, px, px2)"] = \
+                [hex.ax().c, Ax.ax_to_of(hex.ax()), Ax.ax_to_px(hex.ax()), Ax.ax_to_px(hex.ax()) + (Hex.dim // V2(2, 2))]
             chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(hex.ax()))
-            pk.debug.debug["Chunk indices (chunk, hex, topleft)"] = \
-                [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft()]
+            pk.debug.debug["Chunk indices (c, h, tl, br)"] = \
+                [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), 
+                 self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft(),
+                 self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].bottomright()]

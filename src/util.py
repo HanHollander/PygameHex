@@ -8,6 +8,9 @@ RMB: int = 2
 MMB_UP: int = 4
 MMB_DOWN: int = 5
 
+def even(a: int) -> int:
+    return a + (a % 2)
+
 
 _T = TypeVar('_T')
 class Numeric(Protocol):
@@ -29,7 +32,7 @@ class V2(Generic[T]):
 
     def get(self) -> tuple[T, T]:
         return self._t
-    
+
     def a(self) -> T:
         return self._t[0]
     def b(self) -> T:
