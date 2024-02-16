@@ -1,4 +1,5 @@
 from typing import Any, Callable, TYPE_CHECKING
+from model.terrain import TerrainHeightmap, TerrainColourMapping, TerrainType
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -168,6 +169,25 @@ class HexSpriteStore:
             HexSpriteStore.scaled_store[i] =  pg.transform.scale(HexSpriteStore._store[i], (Hex.dim[0], Hex.dim[1]))
 
 
+class HexAttr():
+
+    # static class variables
+    heightmap: TerrainHeightmap
+    colours: TerrainColourMapping
+
+    @staticmethod
+    def init_heightmap() -> None:
+        HexAttr.heightmap = TerrainHeightmap()
+
+    @staticmethod
+    def init_colours() -> None:
+        HexAttr.colours = TerrainColourMapping()
+
+    def __init__(self, hex: "Hex") -> None:
+        self.height: float = HexAttr.heightmap.get_height(Ax.ax_to_of(hex.ax()))
+        self.terrain: TerrainType = HexAttr.heightmap.get_terrain_type(self.height)
+
+    
 class Hex(pk.model.Model):
     
     # static class variables
@@ -200,6 +220,7 @@ class Hex(pk.model.Model):
             
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
+        self._attr: HexAttr = HexAttr(self)
 
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
         self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
@@ -499,10 +520,10 @@ class HexController(pk.model.Model):
         Hex.orientation = HEX_ORIENTATION
         Hex.set_size(HEX_MAX_SIZE)
         HexSpriteStore.init_store()
+        HexAttr.init_heightmap()
         self._view: "HexView" = view
         self._store: HexStore = HexStore()
         self._store.fill_chunks()
-        # self._view.min_max_chunk_idx = self._view.get_min_max_chunk_idx(self._view.get_min_max_of())
         self.apply_to_all_hex_in_store(HexController.add_hex_to_view)
         
     def store(self) -> HexStore:

@@ -12,6 +12,7 @@ from view.hex import HexView
 from model.hex import HexController
 from view.loading import display_message
 
+
 display_message(pynkie.display, "> initialising view...")
 init_scale: int = 1
 camera_width: int = SCREEN_WIDTH
