@@ -5,7 +5,7 @@ from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZE, ZOOM_STEP_FACTOR
+from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, ZOOM_STEP_FACTOR
 
 
 class HexViewFlags():
@@ -72,7 +72,6 @@ class HexView(pk.view.ScaledView):
 
     def update_chunk_surface(self, in_camera: HexChunkSet, topleft: V2[int], bottomright: V2[int]) -> None:
         surface_size: V2[int] = bottomright - topleft
-        pk.debug.debug["surface_size"] = surface_size
 
         if self.flags.init:
             for chunk in in_camera.chunks():
@@ -107,12 +106,13 @@ class HexView(pk.view.ScaledView):
             chunk: HexChunk = self.chunks_to_be_drawn.pop()
             filled: bool = False
             updated: bool = False
+            update_hexes: bool = False
             if not chunk.filled():
                 chunk.fill()
                 filled = True
                 chunk.set_filled(True)
             if not chunk.updated(): 
-                chunk.reset_hexes()
+                update_hexes = True
                 chunk.reset_topleft()
                 chunk.reset_bottomright()
                 updated = True
@@ -122,10 +122,9 @@ class HexView(pk.view.ScaledView):
                 for y in range(HexChunk.nof_hexes):
                     hex: Hex | None = chunk.hexes()[x][y]
                     if hex:
-                        if not hex.updated():
+                        if update_hexes:
                             hex.update_element_rect()
                             hex.update_element_image()
-                            hex.set_updated(True)
                         element: HexSpriteElement = hex.element()
                         target_rect = pg.Rect(element.rect.x - self.chunk_surface_topleft.x(), 
                                               element.rect.y - self.chunk_surface_topleft.y(),  
@@ -203,16 +202,18 @@ class HexView(pk.view.ScaledView):
                     HexStore.set_nof_chunks(HexStore.nof_chunks // V2(int(ZOOM_STEP_FACTOR), int(ZOOM_STEP_FACTOR)))
                     self.flags.request_reset_chunks = True
 
+            assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == HEX_NOF_HEXES
+
             Hex.set_size(new_size)
             HexChunk.set_size_px()
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
+
             if not self.flags.request_reset_chunks: self.flags.request_reset_chunk_update_status = True
-            self.flags.request_reset_scaled_store = True  # request for the sprites to be scaled
-            # if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
+            self.flags.request_reset_scaled_store = True  
             self.flags.request_update_in_camera = True
-            self.flags.request_update_chunk_surface = True  # chunk surface always changes
+            self.flags.request_update_chunk_surface = True
             self.flags.zoom_happened = True
 
     

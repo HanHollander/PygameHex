@@ -28,6 +28,7 @@ class Game(pk.model.Model):
         pk.debug.debug["Hex size"] = Hex.size
         pk.debug.debug["Hex dim (int, float)"] = [Hex.dim, Hex.dim_float]
         pk.debug.debug["Chunk size"] = HexChunk.size_px
+        pk.debug.debug["Zoom overflow"] = HexChunk.size_overflow
 
     def handle_event(self, event: pg.event.Event) -> None:
         pk.model.Model.handle_event(self, event)

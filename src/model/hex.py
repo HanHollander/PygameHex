@@ -5,7 +5,7 @@ import numpy as np
 
 from math import ceil, floor, sqrt, cos, sin, pi
 from util import V2, V3, even
-from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_NOF_HEXES_IN_CHUNK, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_ORIENTATION, HEX_INIT_NOF_CHUNKS_IN_STORE, ZOOM_STEP_FACTOR, HexOrientation
+from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_CHUNK_SIZE, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, HEX_ORIENTATION, HEX_INIT_STORE_SIZE, ZOOM_STEP_FACTOR, HexOrientation
 
 if TYPE_CHECKING:
     from view.hex import HexView
@@ -200,7 +200,6 @@ class Hex(pk.model.Model):
             
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
-        self._updated = False
 
         chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
         self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
@@ -214,12 +213,6 @@ class Hex(pk.model.Model):
     
     def element(self) -> HexSpriteElement:
         return self._element
-    
-    def updated(self) -> bool:
-        return self._updated
-    
-    def set_updated(self, updated: bool) -> None:
-        self._updated = updated
     
     def update_element_rect(self) -> None:
         px: V2[int] = Ax.ax_to_px(self._ax)
@@ -241,7 +234,7 @@ class HexChunk:
 
     # static class variables:
     size_px: V2[int]
-    nof_hexes: int = HEX_INIT_NOF_HEXES_IN_CHUNK
+    nof_hexes: int = HEX_INIT_CHUNK_SIZE
     size_overflow: int = 0
 
     @staticmethod
@@ -346,12 +339,6 @@ class HexChunk:
 
     def get_hex(self, idx: V2[int]) -> Hex | None:
         return self._hexes[idx.x()][idx.y()]
-    
-    def reset_hexes(self):
-        for x in range(len(self._hexes)):
-            for y in range(len(self._hexes[x])):
-                hex: Hex | None = self._hexes[x][y]
-                if hex: hex.set_updated(False)
 
 
 class HexChunkSet:
@@ -416,10 +403,14 @@ class HexStore:
         return V2(floor(of.x() / HexChunk.nof_hexes), floor(of.y() / HexChunk.nof_hexes))
 
     def __init__(self) -> None:
-        HexStore.set_nof_chunks(HEX_INIT_NOF_CHUNKS_IN_STORE)
-        HexChunk.nof_hexes = HEX_INIT_NOF_HEXES_IN_CHUNK
+        HexStore.set_nof_chunks(HEX_INIT_STORE_SIZE)
+        HexChunk.nof_hexes = HEX_INIT_CHUNK_SIZE
+
+        assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == HEX_NOF_HEXES
+
         HexChunk.set_size_overflow(HEX_INIT_CHUNK_OVERFLOW)
         HexChunk.set_size_px()
+
         self._hexes: list[list[Hex]] = [[Hex(Ax.of_to_ax(V2(x, y)).q(), Ax.of_to_ax(V2(x, y)).r()) for y in range(HexStore.nof_chunks.y() * HexChunk.nof_hexes)] for x in range(HexStore.nof_chunks.x() * HexChunk.nof_hexes)]
         self._chunks: list[list[HexChunk]] = [[HexChunk(V2(x, y), self) for y in range(HexStore.nof_chunks.y())] for x in range (HexStore.nof_chunks.x())]
         self._in_camera: HexChunkSet = HexChunkSet()
@@ -478,7 +469,6 @@ class HexStore:
 
     def fill_chunks(self) -> None:
         # assume new size of chunk and nof chunks has been set
-        assert HexStore.nof_chunks.x() * HexChunk.nof_hexes == len(self._hexes) and HexStore.nof_chunks.y() * HexChunk.nof_hexes == len(self._hexes[0]), "nof chunks or nof hexes not correct"
         for i in range(len(self._chunks)):
             for j in range(len(self._chunks[i])):
                 self.fill_chunk(V2(i, j))
@@ -502,10 +492,6 @@ class HexController(pk.model.Model):
     def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
         chunk.reset_bottomright()
-
-    @staticmethod
-    def reset_hex(_: "HexController | None", hex: Hex) -> None:
-        hex.set_updated(False)
             
     def __init__(self, view: "HexView") -> None:
         pk.model.Model.__init__(self)
@@ -566,8 +552,8 @@ class HexController(pk.model.Model):
             self.apply_to_all_hex_in_chunk(chunk, f)
 
     def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController | None", Hex], None]) -> None:
-        for x in range(HEX_INIT_NOF_HEXES_IN_CHUNK):
-            for y in range(HEX_INIT_NOF_HEXES_IN_CHUNK):
+        for x in range(HEX_INIT_CHUNK_SIZE):
+            for y in range(HEX_INIT_CHUNK_SIZE):
                 hex: Hex | None = chunk.get_hex(V2(x, y))
                 if isinstance(hex, Hex): f(self, hex)
 
