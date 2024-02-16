@@ -96,7 +96,7 @@ class V3(Generic[T]):
     def __init__(self, a: T, b: T, c: T) -> None:
         self._t: tuple[T, T, T] = (a, b, c)
 
-    def t(self) -> tuple[T, T, T]:
+    def get(self) -> tuple[T, T, T]:
         return self._t
     
     def a(self) -> T:
