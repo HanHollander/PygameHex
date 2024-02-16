@@ -11,12 +11,14 @@ from config import CHUNKS_PER_FRAME, DRAG_MOVE_FACTOR, HEX_MAX_SIZE, HEX_MIN_SIZ
 class HexViewFlags():
 
     def __init__(self) -> None:
-        self.request_reset_chunks = False
-        self.request_reset_scaled_store = False
+        self.request_reset_chunks = True
+        self.request_reset_chunk_update_status = True
+        self.request_reset_scaled_store = True
         self.request_update_in_camera = True
         self.request_update_chunk_surface = True
         self.request_update_and_add_single_chunk_to_surface = True
 
+        self.init = True
         self.pan_happened = False
         self.zoom_happened = False
 
@@ -71,7 +73,13 @@ class HexView(pk.view.ScaledView):
     def update_chunk_surface(self, in_camera: HexChunkSet, topleft: V2[int], bottomright: V2[int]) -> None:
         surface_size: V2[int] = bottomright - topleft
         pk.debug.debug["surface_size"] = surface_size
-        if self.flags.zoom_happened:
+
+        if self.flags.init:
+            for chunk in in_camera.chunks():
+                self.chunks_to_be_drawn.add(chunk)
+            self.chunk_surface = pg.Surface(surface_size.get())
+            self.flags.init = False
+        elif self.flags.zoom_happened:
             self.chunks_to_be_drawn.clear()
             for chunk in in_camera.chunks():
                 self.chunks_to_be_drawn.add(chunk)
@@ -97,16 +105,27 @@ class HexView(pk.view.ScaledView):
         chunk_nr: int = 0
         while len(self.chunks_to_be_drawn) > 0 and chunk_nr < CHUNKS_PER_FRAME:
             chunk: HexChunk = self.chunks_to_be_drawn.pop()
-            if not chunk.filled(): chunk.fill()
-            chunk.reset_topleft()
-            chunk.reset_bottomright()
-            print("update_and_add_single_chunk_to_surface", chunk.idx(), HexController.i)
+            filled: bool = False
+            updated: bool = False
+            if not chunk.filled():
+                chunk.fill()
+                filled = True
+                chunk.set_filled(True)
+            if not chunk.updated(): 
+                chunk.reset_hexes()
+                chunk.reset_topleft()
+                chunk.reset_bottomright()
+                updated = True
+                chunk.set_updated(True)
+            print(HexController.i, "update_and_add_single_chunk_to_surface", chunk.idx(), "filled:" + str(filled), "updated:" + str(updated))
             for x in range (HexChunk.nof_hexes):
                 for y in range(HexChunk.nof_hexes):
                     hex: Hex | None = chunk.hexes()[x][y]
                     if hex:
-                        hex.update_element_rect()
-                        hex.update_element_image()
+                        if not hex.updated():
+                            hex.update_element_rect()
+                            hex.update_element_image()
+                            hex.set_updated(True)
                         element: HexSpriteElement = hex.element()
                         target_rect = pg.Rect(element.rect.x - self.chunk_surface_topleft.x(), 
                                               element.rect.y - self.chunk_surface_topleft.y(),  
@@ -189,6 +208,7 @@ class HexView(pk.view.ScaledView):
             mouse_px: V2[int] = V2(*pg.mouse.get_pos()) + V2(*self.viewport.camera.topleft)
             diff_px: V2[float] = V2(mouse_px[0] * scale - mouse_px[0], mouse_px[1] * scale - mouse_px[1])
             self.move_viewport(diff_px)
+            if not self.flags.request_reset_chunks: self.flags.request_reset_chunk_update_status = True
             self.flags.request_reset_scaled_store = True  # request for the sprites to be scaled
             # if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices changed
             self.flags.request_update_in_camera = True
