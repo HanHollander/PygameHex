@@ -7,6 +7,7 @@ import numpy as np
 from math import ceil, floor, sqrt, cos, sin, pi
 from util import V2, V3, even
 from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_CHUNK_SIZE, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, HEX_ORIENTATION, HEX_INIT_STORE_SIZE, ZOOM_STEP_FACTOR, HexOrientation
+from view.loading import display_message
 
 if TYPE_CHECKING:
     from view.hex import HexView
@@ -118,9 +119,10 @@ class Ax:
 
 class HexSpriteElement(pk.elements.Element, pg.sprite.Sprite):
 
-    def __init__(self, pos: tuple[int, int], img: pg.Surface) -> None:
+    def __init__(self, pos: tuple[int, int], img: pg.Surface, colour: V3[int]) -> None:
         pk.elements.Element.__init__(self, pos, img.get_size())
         pg.sprite.Sprite.__init__(self)
+        self.colour: V3[int] = colour
         self.image: pg.Surface = img
 
 class HexSpriteStore:
@@ -173,7 +175,7 @@ class HexSpriteStore:
         HexSpriteStore._store = {}
         HexSpriteStore.scaled_store = {}
         for terrain in TerrainType:
-            HexSpriteStore._store[terrain] = HexSpriteStore.make_surface_from_colour(HexAttr.colours.get_colour(terrain), dim)
+            HexSpriteStore._store[terrain] = HexSpriteStore.make_surface_from_colour(V3(0xff, 0xff, 0xff), dim)
             HexSpriteStore.scaled_store[terrain] = HexSpriteStore._store[terrain].copy()
 
     @staticmethod
@@ -237,10 +239,16 @@ class Hex(pk.model.Model):
 
         px: V2[int] = Ax.ax_to_px(self._ax)
         pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
-        self._element: HexSpriteElement = HexSpriteElement(pos=pos, img=HexSpriteStore.scaled_store[self._attr.terrain])
+        colour: V3[int] = HexAttr.colours.get_colour(self._attr.terrain).scalar_truediv(255).scalar_mul(self._attr.height).scalar_mul(255)
+        self._element: HexSpriteElement = HexSpriteElement(pos=pos, 
+                                                           img=HexSpriteStore.scaled_store[self._attr.terrain], 
+                                                           colour=colour)
 
     def ax(self) -> Ax:
         return self._ax
+    
+    def attr(self) -> HexAttr:
+        return self._attr
     
     def element(self) -> HexSpriteElement:
         return self._element
@@ -521,17 +529,21 @@ class HexController(pk.model.Model):
         chunk.reset_topleft()
         chunk.reset_bottomright()
             
-    def __init__(self, view: "HexView") -> None:
+    def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)
-        # init Hex, HexSpriteStore, HexView and HexStore
+        display_message(display, "    > initialising hex")
         Hex.orientation = HEX_ORIENTATION
         Hex.set_size(HEX_MAX_SIZE)
+        display_message(display, "    > initialising hex attributes")
         HexAttr.init_heightmap()
         HexAttr.init_colours()
+        display_message(display, "    > initialising sprite store")
         HexSpriteStore.init_store()
-        self._view: "HexView" = view
+        display_message(display, "    > initialising hex store")
         self._store: HexStore = HexStore()
         self._store.fill_chunks()
+        display_message(display, "    > initialising hex view")
+        self._view: "HexView" = view
         self.apply_to_all_hex_in_store(HexController.add_hex_to_view)
         
     def store(self) -> HexStore:

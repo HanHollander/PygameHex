@@ -55,18 +55,28 @@ class V2(Generic[T]):
 
     def __add__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] + other._t[0], self._t[1] + other._t[1])
+    def scalar_add(self, value: T) -> "V2[T]":
+        return V2(self._t[0] + value, self._t[1] + value)
     
     def __sub__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] - other._t[0], self._t[1] - other._t[1])
+    def scalar_sub(self, value: T) -> "V2[T]":
+        return V2(self._t[0] - value, self._t[1] - value)
 
     def __mul__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] * other._t[0], self._t[1] * other._t[1])
+    def scalar_mul(self, value: T) -> "V2[T]":
+        return V2(self._t[0] * value, self._t[1] * value)
     
     def __truediv__(self, other: "V2[T]") -> "V2[Any]":
         return V2(self._t[0] / other._t[0], self._t[1] / other._t[1])
+    def scalar_truediv(self, value: T) -> "V2[Any]":
+        return V2(self._t[0] / value, self._t[1] / value)
     
     def __floordiv__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] // other._t[0], self._t[1] // other._t[1])
+    def scalar_floordiv(self, value: T) -> "V2[T]":
+        return V2(self._t[0] // value, self._t[1] // value)
     
     def __mod__(self, other: "V2[T]") -> "V2[T]":
         return V2(self._t[0] % other._t[0], self._t[1] % other._t[1])
@@ -129,18 +139,28 @@ class V3(Generic[T]):
 
     def __add__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] + other._t[0], self._t[1] + other._t[1], self._t[2] + other._t[2])
+    def scalar_add(self, value: T) -> "V3[T]":
+        return V3(self._t[0] + value, self._t[1] + value, self._t[2] + value)
     
     def __sub__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] - other._t[0], self._t[1] - other._t[1], self._t[2] - other._t[2])
+    def scalar_sub(self, value: T) -> "V3[T]":
+        return V3(self._t[0] - value, self._t[1] - value, self._t[2] - value)
 
     def __mul__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] * other._t[0], self._t[1] * other._t[1], self._t[2] * other._t[2])
+    def scalar_mul(self, value: T) -> "V3[T]":
+        return V3(self._t[0] * value, self._t[1] * value, self._t[2] * value)
     
     def __truediv__(self, other: "V3[T]") -> "V3[Any]":
         return V3(self._t[0] / other._t[0], self._t[1] / other._t[1], self._t[2] / other._t[2])
+    def scalar_truediv(self, value: T) -> "V3[Any]":
+        return V3(self._t[0] / value, self._t[1] / value, self._t[2] / value)
     
     def __floordiv__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] // other._t[0], self._t[1] // other._t[1], self._t[2] // other._t[2])
+    def scalar_floordiv(self, value: T) -> "V3[T]":
+        return V3(self._t[0] // value, self._t[1] // value, self._t[2] // value)
     
     def __mod__(self, other: "V3[T]") -> "V3[T]":
         return V3(self._t[0] % other._t[0], self._t[1] % other._t[1], self._t[2] % other._t[2])
