@@ -5,8 +5,8 @@ import pynkie as pk
 import numpy as np
 
 from math import ceil, floor, sqrt, cos, sin, pi
-from util import V2, V3, even
-from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_CHUNK_SIZE, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, HEX_ORIENTATION, HEX_INIT_STORE_SIZE, ZOOM_STEP_FACTOR, HexOrientation
+from util import V2, V3, clip, even
+from config import *
 from view.loading import display_message
 
 if TYPE_CHECKING:
@@ -199,7 +199,7 @@ class HexAttr():
         HexAttr.colours = TerrainColourMapping()
 
     def __init__(self, hex: "Hex") -> None:
-        self.height: float = HexAttr.heightmap.get_height(Ax.ax_to_of(hex.ax()))
+        self.height: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(hex.ax()))
         self.terrain: TerrainType = HexAttr.heightmap.get_terrain_type(self.height)
 
     
@@ -233,16 +233,73 @@ class Hex(pk.model.Model):
         Hex.dim, Hex.dim_float = Hex.calc_dim()
         Hex.size_updated = True
             
+
+    def get_terrain_colour(self) -> V3[int]:
+        c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
+        h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
+        height_mult: float = (self._attr.height - h1) / abs(h2 - h1)
+        colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
+        return V3(c1[0], c1[1], c1[2]) + colour_diff
+    
+    def get_shadow_mult(self) -> float:
+        shadow_mult = 1.0
+        if self._attr.terrain not in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
+            ax_left: Ax = Ax(V2(self._ax.q() - 1, self._ax.r()))
+            height_left: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_left))
+            if height_left > self._attr.height:
+                shadow_mult_left: float = SHADOW_MULT_BIG_FACTOR * (height_left - self._attr.height)
+                shadow_mult *= clip(shadow_mult_left, SHADOW_MULT_BIG_MIN, SHADOW_MULT_BIG_MAX)
+            
+            ax_topleft: Ax = Ax(V2(self._ax.q(), self._ax.r() - 1))
+            height_topleft: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_topleft))
+            if height_topleft > self._attr.height:
+                shadow_mult_topleft: float = SHADOW_MULT_SMALL_FACTOR * (height_topleft - self._attr.height)
+                shadow_mult *= clip(shadow_mult_topleft, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
+
+            ax_bottomleft: Ax = Ax(V2(self._ax.q() - 1, self._ax.r() + 1))
+            height_bottomleft: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_bottomleft))
+            if height_bottomleft > self._attr.height:
+                shadow_mult_bottomleft: float = SHADOW_MULT_SMALL_FACTOR * (height_bottomleft - self._attr.height)
+                shadow_mult *= clip(shadow_mult_bottomleft, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
+        return shadow_mult
+    
+    def get_hightlight_mul(self) -> float:
+        hightlight_mul = 1.0
+        if self._attr.terrain not in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
+            ax_right: Ax = Ax(V2(self._ax.q() + 1, self._ax.r()))
+            height_right: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_right))
+            if height_right > self._attr.height:
+                hightlight_mul_right: float = SHADOW_MULT_BIG_FACTOR * (height_right - self._attr.height)
+                hightlight_mul *= clip(hightlight_mul_right, SHADOW_MULT_BIG_MIN, SHADOW_MULT_BIG_MAX)
+            
+            ax_topright: Ax = Ax(V2(self._ax.q() + 1, self._ax.r() - 1))
+            height_topright: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_topright))
+            if height_topright > self._attr.height:
+                hightlight_mul_topright: float = SHADOW_MULT_SMALL_FACTOR * (height_topright - self._attr.height)
+                hightlight_mul *= clip(hightlight_mul_topright, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
+
+            ax_bottomright: Ax = Ax(V2(self._ax.q(), self._ax.r() + 1))
+            height_bottomright: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_bottomright))
+            if height_bottomright > self._attr.height:
+                hightlight_mul_bottomright: float = SHADOW_MULT_SMALL_FACTOR * (height_bottomright - self._attr.height)
+                hightlight_mul *= clip(hightlight_mul_bottomright, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
+        return hightlight_mul
+    
+    def determine_colour(self) -> V3[int]:
+        colour: V3[int] = self.get_terrain_colour()
+        colour = colour.to_float().scalar_mul(self.get_shadow_mult()).to_int()
+        colour = colour.to_float().scalar_mul(1 / self.get_hightlight_mul()).to_int().min(V3(255, 255, 255))
+        return colour
+
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
         self._attr: HexAttr = HexAttr(self)
 
         px: V2[int] = Ax.ax_to_px(self._ax)
         pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
-        colour: V3[int] = HexAttr.colours.get_colour(self._attr.terrain).scalar_truediv(255).scalar_mul(self._attr.height).scalar_mul(255)
-        self._element: HexSpriteElement = HexSpriteElement(pos=pos, 
-                                                           img=HexSpriteStore.scaled_store[self._attr.terrain], 
-                                                           colour=colour)
+        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain]
+        colour: V3[int] = self.determine_colour()
+        self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
 
     def ax(self) -> Ax:
         return self._ax

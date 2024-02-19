@@ -1,10 +1,12 @@
 from enum import Enum
+from math import ceil, sqrt
 from typing import Any
 from nptyping import NDArray
 import numpy as np
+import pygame as pg
 import perlin_numpy as pnp
 from config import *
-from util import V2, V3
+from util import V2, V3, normalise
 
 # https://www.redblobgames.com/maps/terrain-from-noise/ 
 
@@ -23,16 +25,17 @@ class TerrainType(str, Enum):
 class TerrainColourMapping:
 
     def __init__(self) -> None:
-        C_SNOW = V3(0xff, 0xfa, 0xfa)
-        C_MOUNTAIN = V3(0x6e, 0x70, 0x6e)
-        C_HILL = V3(0x78, 0x91, 0x44)
-        C_FOREST = V3(0x23, 0x4a, 0x10)
-        C_BEACH = V3(0xff, 0xfc, 0xde)
-        C_SHALLOW_OCEAN = V3(0x83, 0xb5, 0xd6)
-        C_DEEP_OCEAN = V3(0x1e, 0x53, 0x75)
-        C_VOID = V3(0x00, 0x00, 0x00)
+        clr = pg.Color
+        C_SNOW: tuple[pg.Color, pg.Color] = (clr("#fffafa"), clr("#fffafa"))
+        C_MOUNTAIN: tuple[pg.Color, pg.Color] = (clr("#7f867e"), clr("#d8d8d8"))
+        C_HILL: tuple[pg.Color, pg.Color] = (clr("#293b21"), clr("#718873"))
+        C_FOREST: tuple[pg.Color, pg.Color] = (clr("#17270f"), clr("#5e7a47"))
+        C_BEACH: tuple[pg.Color, pg.Color] = (clr("#ebeec3"), clr("#ebeec3"))
+        C_SHALLOW_OCEAN: tuple[pg.Color, pg.Color] = (clr("#6281b9"), clr("#9ac2dd"))
+        C_DEEP_OCEAN: tuple[pg.Color, pg.Color] = (clr("#435f92"), clr("#5471a7"))
+        C_VOID: tuple[pg.Color, pg.Color] = (clr("#000000"), clr("#000000"))
 
-        self._mapping: dict[TerrainType, V3[int]] = {
+        self._mapping: dict[TerrainType, tuple[pg.Color, pg.Color]] = {
             TerrainType.SNOW: C_SNOW,
             TerrainType.MOUNTAIN: C_MOUNTAIN,
             TerrainType.HILL: C_HILL,
@@ -43,7 +46,7 @@ class TerrainColourMapping:
             TerrainType.VOID: C_VOID
         }
 
-    def get_colour(self, type: TerrainType) -> V3[int]:
+    def get_colour(self, type: TerrainType) -> tuple[pg.Color, pg.Color]:
         return self._mapping[type]
     
 
@@ -51,31 +54,17 @@ class TerrainColourMapping:
 class TerrainHeightmap:
     
     def __init__(self) -> None:
-        H_SNOW: float = 0.95
-        H_MOUNTAIN: float = 0.89
-        H_HILL: float = 0.79
-        H_FOREST: float = 0.61
-        H_BEACH: float = 0.608
-        H_SHALLOW_OCEAN: float = 0.55
-        H_DEEP_OCEAN: float = 0.0
-        H_VOID: float = -999.0
+        H_SNOW = V2(0.95, 999.0)
+        H_MOUNTAIN = V2(0.79, H_SNOW[0])
+        H_HILL = V2(0.61, H_MOUNTAIN[0])
+        H_SHALLOW_OCEAN = V2(0.55, H_HILL[0])
+        H_DEEP_OCEAN = V2(0.0, H_SHALLOW_OCEAN[0])
+        H_VOID = V2(-999.0, H_DEEP_OCEAN[0])
 
-
-        # H_SNOW: float = 0.00 #0.95
-        # H_MOUNTAIN: float = -0.01 # 0.81
-        # H_HILL: float = -0.01 # 0.69
-        # H_FOREST: float = -0.01 # 0.61
-        # H_BEACH: float = -0.01 # 0.608
-        # H_SHALLOW_OCEAN: float = -0.01 # 0.55
-        # H_DEEP_OCEAN: float = -0.01 # 0.0
-        # H_VOID: float = -999.0
-
-        self._mapping: dict[TerrainType, float] = {
+        self._mapping: dict[TerrainType, V2[float]] = {
             TerrainType.SNOW: H_SNOW,
             TerrainType.MOUNTAIN: H_MOUNTAIN,
             TerrainType.HILL: H_HILL,
-            TerrainType.FOREST: H_FOREST,
-            TerrainType.BEACH: H_BEACH,
             TerrainType.SHALLOW_OCEAN: H_SHALLOW_OCEAN,
             TerrainType.DEEP_OCEAN: H_DEEP_OCEAN,
             TerrainType.VOID: H_VOID
@@ -83,75 +72,69 @@ class TerrainHeightmap:
 
         np.random.seed()
 
+        noise_dim: V2[int] = V2(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y())
+
         continent_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
+            shape=(noise_dim.x(), noise_dim.y()),
             res=CONTINENT_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
-        feature_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
-            res=FEATURE_NOISE_FREQUENCY.get(),
+        normalise(continent_noise)
+
+        mountain0_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
+            shape=(noise_dim.x(), noise_dim.y()),
+            res=MOUNTAIN0_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
-        mountain_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
-            res=MOUNTAIN_NOISE_FREQUENCY.get(),
+        mountain1_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
+            shape=(noise_dim.x(), noise_dim.y()),
+            res=MOUNTAIN1_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
+
+        mountain_noise = (0.2 * mountain0_noise ) + (0.8 * mountain1_noise)
         mountain_noise = -1 * np.abs(mountain_noise)
         mountain_noise += 0.5
         mountain_noise *= 2
+
+
         terrain_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
-            res=TERRAIN_NOISE_FREQUENCY.get(),
+            shape=(noise_dim.x(), noise_dim.y()),
+            res=TERRAIN0_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
         terrain1_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
+            shape=(noise_dim.x(), noise_dim.y()),
             res=TERRAIN1_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
         terrain2_noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d(
-            shape=(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()),
+            shape=(noise_dim.x(), noise_dim.y()),
             res=TERRAIN2_NOISE_FREQUENCY.get(),
             tileable=(True, False)
         )
-        x_axis = np.linspace(0, 1, min(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()))[:, None]
-        y_axis = np.linspace(0, 1, min(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y()))[None, :]
-        # edge_gradient = np.sqrt(x_axis ** 2 + y_axis ** 2)
-        # edge_gradient = np.interp(edge_gradient, np.linspace(0, HEX_NOF_HEXES.x() - 1, HEX_NOF_HEXES.x()), np.linspace(0, HEX_NOF_HEXES.y() - 1, HEX_NOF_HEXES.y()))
-
 
         heightmap = (CONTINENT_NOISE_WEIGHT * continent_noise) \
-            + (FEATURE_NOISE_WEIGHT * feature_noise) \
                 + (MOUNTAIN_NOISE_WEIGHT * mountain_noise) \
-                    + (TERRAIN_NOISE_WEIGHT * terrain_noise) \
+                    + (TERRAIN0_NOISE_WEIGHT * terrain_noise) \
                     + (TERRAIN1_NOISE_WEIGHT * terrain1_noise) \
                     + (TERRAIN2_NOISE_WEIGHT * terrain2_noise)
-        # heightmap *= edge_gradi/ent
-
-        # "Peretoish?" https://www.reddit.com/r/proceduralgeneration/comments/13qzykm/q_quick_question_about_smoothing_perlin_noise_by/ 
-        # heightmap = -1 * np.abs(heightmap)
-        # heightmap = heightmap + 0.5
-        # heightmap = heightmap * 2
-        # heightmap = heightmap ** 1.4
+        
 
 
 
-        # normalise from [-1, 1] to [0, 1]
-        heightmap += np.abs(np.min(heightmap))
-        heightmap /= np.max(heightmap)
+        normalise(heightmap)
         self._map: list[list[float]] =  heightmap.tolist()
 
-    def get_height(self, of: V2[int]) -> float:
-        return self._map[of.x()][of.y()]
+    def get_height_from_of(self, of: V2[int]) -> float:
+        return  self._map[of.x()][of.y()] if of.x() < len(self._map) and of.y() < len(self._map[0]) else 0.0
+    
+    def get_height(self, terrain: TerrainType) -> V2[float]:
+        return self._mapping[terrain]
 
     def get_terrain_type(self, height: float) -> TerrainType:
-        result: TerrainType = TerrainType.VOID
-        max_height: float = self._mapping[result]
         for terrain in self._mapping.keys():
-            terrain_height: float = self._mapping[terrain]
-            if height >= terrain_height and terrain_height > max_height:
-                result = terrain
-                max_height = terrain_height
-        return result
+            terrain_height: V2[float] = self._mapping[terrain]
+            if height >= terrain_height[0] and height < terrain_height[1]:
+                return terrain
+        return TerrainType.VOID
