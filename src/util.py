@@ -12,14 +12,13 @@ MMB_UP: int = 4
 MMB_DOWN: int = 5
 
 
-def normalise(array: NDArray[float, Any]):
-    array += np.abs(np.min(array))
-    array /= np.max(array)
-
-
+def normalise(array: NDArray[float, Any]) -> NDArray[float, Any]:
+    array = (array - np.min(array)) / (np.max(array) - np.min(array))
+    return array
 
 def even(a: int) -> int:
     return a + (a % 2)
+
 
 _T = TypeVar('_T')
 class Numeric(Protocol):

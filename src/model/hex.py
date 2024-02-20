@@ -241,54 +241,29 @@ class Hex(pk.model.Model):
         colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
         return V3(c1[0], c1[1], c1[2]) + colour_diff
     
-    def get_shadow_mult(self) -> float:
-        shadow_mult = 1.0
-        if self._attr.terrain not in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
-            ax_left: Ax = Ax(V2(self._ax.q() - 1, self._ax.r()))
-            height_left: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_left))
-            if height_left > self._attr.height:
-                shadow_mult_left: float = SHADOW_MULT_BIG_FACTOR * (height_left - self._attr.height)
-                shadow_mult *= clip(shadow_mult_left, SHADOW_MULT_BIG_MIN, SHADOW_MULT_BIG_MAX)
-            
-            ax_topleft: Ax = Ax(V2(self._ax.q(), self._ax.r() - 1))
-            height_topleft: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_topleft))
-            if height_topleft > self._attr.height:
-                shadow_mult_topleft: float = SHADOW_MULT_SMALL_FACTOR * (height_topleft - self._attr.height)
-                shadow_mult *= clip(shadow_mult_topleft, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
 
-            ax_bottomleft: Ax = Ax(V2(self._ax.q() - 1, self._ax.r() + 1))
-            height_bottomleft: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_bottomleft))
-            if height_bottomleft > self._attr.height:
-                shadow_mult_bottomleft: float = SHADOW_MULT_SMALL_FACTOR * (height_bottomleft - self._attr.height)
-                shadow_mult *= clip(shadow_mult_bottomleft, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
-        return shadow_mult
-    
-    def get_hightlight_mul(self) -> float:
-        hightlight_mul = 1.0
-        if self._attr.terrain not in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
-            ax_right: Ax = Ax(V2(self._ax.q() + 1, self._ax.r()))
-            height_right: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_right))
-            if height_right > self._attr.height:
-                hightlight_mul_right: float = SHADOW_MULT_BIG_FACTOR * (height_right - self._attr.height)
-                hightlight_mul *= clip(hightlight_mul_right, SHADOW_MULT_BIG_MIN, SHADOW_MULT_BIG_MAX)
-            
-            ax_topright: Ax = Ax(V2(self._ax.q() + 1, self._ax.r() - 1))
-            height_topright: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_topright))
-            if height_topright > self._attr.height:
-                hightlight_mul_topright: float = SHADOW_MULT_SMALL_FACTOR * (height_topright - self._attr.height)
-                hightlight_mul *= clip(hightlight_mul_topright, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
 
-            ax_bottomright: Ax = Ax(V2(self._ax.q(), self._ax.r() + 1))
-            height_bottomright: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(ax_bottomright))
-            if height_bottomright > self._attr.height:
-                hightlight_mul_bottomright: float = SHADOW_MULT_SMALL_FACTOR * (height_bottomright - self._attr.height)
-                hightlight_mul *= clip(hightlight_mul_bottomright, SHADOW_MULT_SMALL_MIN, SHADOW_MULT_SMALL_MAX)
-        return hightlight_mul
+    def get_shading_mult(self) -> float:
+        shading_mult = 1.0
+        if self._attr.terrain in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
+            return shading_mult
+        
+        gradient_2std: V2[float] = HexAttr.heightmap.get_gradient_std()
+        gradient_x: float = clip(HexAttr.heightmap.get_x_gradient_from_of(Ax.ax_to_of(self._ax)),
+                                 -gradient_2std.x(), gradient_2std.x())
+        gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(Ax.ax_to_of(self._ax)),
+                                 -gradient_2std.y(), gradient_2std.y())
+        
+        mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - SHADING_MULT))
+        shading_mult *= mult_x
+        mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - SHADING_MULT))
+        shading_mult *= mult_y
+
+        return shading_mult
     
     def determine_colour(self) -> V3[int]:
         colour: V3[int] = self.get_terrain_colour()
-        colour = colour.to_float().scalar_mul(self.get_shadow_mult()).to_int()
-        colour = colour.to_float().scalar_mul(1 / self.get_hightlight_mul()).to_int().min(V3(255, 255, 255))
+        colour = colour.to_float().scalar_mul(self.get_shading_mult()).to_int().min(V3(255, 255, 255)).max(V3(0, 0, 0))
         return colour
 
     def __init__(self, q: int, r: int) -> None:
