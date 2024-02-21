@@ -66,3 +66,4 @@ class Game(pk.model.Model):
                 [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), 
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft(),
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].bottomright()]
+            pk.debug.debug["Hex attributes"] = [hex.attr().height, hex.attr().terrain, hex.element().colour]

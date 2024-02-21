@@ -1,11 +1,15 @@
-from typing import Any, Callable, TYPE_CHECKING
+from threading import Thread
+import time
+from typing import Any, Callable, TYPE_CHECKING, Iterable, Mapping
+from model.terrain import TerrainHeightmap, TerrainColourMapping, TerrainType
 import pygame as pg
 import pynkie as pk
 import numpy as np
 
 from math import ceil, floor, sqrt, cos, sin, pi
-from util import V2, V3, even
-from config import HEX_INIT_CHUNK_OVERFLOW, HEX_INIT_CHUNK_SIZE, HEX_INIT_SPRITE_SIZE, HEX_MAX_CHUNK_SIZE, HEX_MAX_SIZE, HEX_MIN_CHUNK_SIZE, HEX_MIN_SIZE, HEX_NOF_HEXES, HEX_ORIENTATION, HEX_INIT_STORE_SIZE, ZOOM_STEP_FACTOR, HexOrientation
+from util import V2, V3, clip, even
+from config import *
+from view.loading import display_message
 
 if TYPE_CHECKING:
     from view.hex import HexView
@@ -117,16 +121,17 @@ class Ax:
 
 class HexSpriteElement(pk.elements.Element, pg.sprite.Sprite):
 
-    def __init__(self, pos: tuple[int, int], img: pg.Surface) -> None:
+    def __init__(self, pos: tuple[int, int], img: pg.Surface, colour: V3[int]) -> None:
         pk.elements.Element.__init__(self, pos, img.get_size())
         pg.sprite.Sprite.__init__(self)
+        self.colour: V3[int] = colour
         self.image: pg.Surface = img
 
 class HexSpriteStore:
 
     # static class variables
-    _store: list[pg.Surface] = []  # should not access, use scaled_store instead
-    scaled_store: list[pg.Surface] = []
+    _store: dict[TerrainType, pg.Surface]  # should not access, use scaled_store instead
+    scaled_store: dict[TerrainType, pg.Surface]
 
     @staticmethod
     def draw_hex(surface: pg.Surface, color: list[int], radius: int, position: V2[int], width: int=0) -> None:
@@ -140,34 +145,66 @@ class HexSpriteStore:
                 pg.draw.polygon(surface, color, [(x + r * cos(2 * pi * i / 6 + 2 * pi / 12), y + r * sin(2 * pi * i / 6 + 2 * pi / 12)) for i in range(6)], width)
 
     @staticmethod
-    def make_surface(of: V2[int], dim: V2[int], draw_border: bool = False, draw_center: bool = False) -> pg.Surface:
+    def make_surface_from_of(of: V2[int], dim: V2[int], draw_border: bool = False, draw_center: bool = False) -> pg.Surface:
         ax: Ax = Ax.of_to_ax(of)
         rgb: list[int] = [abs((63 * ax.q() + 82) % 255), 
                           abs((187 * ax.r() + 43) % 255), 
                           abs((229 * ax.s() + 52) % 255)]
         rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
-        surface = pg.Surface((Hex.dim.x(), Hex.dim.y()), pg.SRCALPHA)
-        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 0)
+        surface = pg.Surface((dim.x(), dim.y()), pg.SRCALPHA)
+        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(dim.x() / 2), round(dim.y() / 2)), 0)
         if draw_border:
-            HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(Hex.dim.x() / 2), round(Hex.dim.y() / 2)), 5)
+            HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(dim.x() / 2), round(dim.y() / 2)), 5)
         if draw_center:
-            pg.draw.circle(surface, rgb_inv, [Hex.dim.x() / 2, Hex.dim.y() / 2], 20)
+            pg.draw.circle(surface, rgb_inv, [dim.x() / 2, dim.y() / 2], 20)
+        return surface
+    
+    @staticmethod
+    def make_surface_from_colour(colour: V3[int], dim: V2[int], draw_border: bool = False, draw_center: bool = False) -> pg.Surface:
+        rgb: list[int] = [*colour.get()]
+        rgb_inv: list[int] = [255 - rgb[0], 255 - rgb[1], 255 - rgb[2]]
+        surface = pg.Surface((dim.x(), dim.y()), pg.SRCALPHA)
+        HexSpriteStore.draw_hex(surface, rgb, Hex.size, V2(round(dim.x() / 2), round(dim.y() / 2)), 0)
+        if draw_border:
+            HexSpriteStore.draw_hex(surface, rgb_inv, Hex.size, V2(round(dim.x() / 2), round(dim.y() / 2)), 5)
+        if draw_center:
+            pg.draw.circle(surface, rgb_inv, [dim.x() / 2, dim.y() / 2], 20)
         return surface
 
     @staticmethod
     def init_store() -> None:
         dim: V2[int] = Hex.calc_dim_from_size(HEX_INIT_SPRITE_SIZE)[0]
-        HexSpriteStore._store = [HexSpriteStore.make_surface(V2(i, j), dim) for i in range(10) for j in range(10)]
-        HexSpriteStore._store[0] = HexSpriteStore.make_surface(V2(3, 3), dim)  # test hex
-        for sprite in HexSpriteStore._store:
-            HexSpriteStore.scaled_store.append(sprite.copy())
+        HexSpriteStore._store = {}
+        HexSpriteStore.scaled_store = {}
+        for terrain in TerrainType:
+            HexSpriteStore._store[terrain] = HexSpriteStore.make_surface_from_colour(V3(0xff, 0xff, 0xff), dim)
+            HexSpriteStore.scaled_store[terrain] = HexSpriteStore._store[terrain].copy()
 
     @staticmethod
     def reset_scaled_store() -> None:
-        for i in range(len(HexSpriteStore.scaled_store)):
-            HexSpriteStore.scaled_store[i] =  pg.transform.scale(HexSpriteStore._store[i], (Hex.dim[0], Hex.dim[1]))
+        for terrain in TerrainType:
+            HexSpriteStore.scaled_store[terrain] =  pg.transform.scale(HexSpriteStore._store[terrain], (Hex.dim[0], Hex.dim[1]))
 
 
+class HexAttr():
+
+    # static class variables
+    heightmap: TerrainHeightmap
+    colours: TerrainColourMapping
+
+    @staticmethod
+    def init_heightmap() -> None:
+        HexAttr.heightmap = TerrainHeightmap()
+
+    @staticmethod
+    def init_colours() -> None:
+        HexAttr.colours = TerrainColourMapping()
+
+    def __init__(self, hex: "Hex") -> None:
+        self.height: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(hex.ax()))
+        self.terrain: TerrainType = HexAttr.heightmap.get_terrain_type(self.height)
+
+    
 class Hex(pk.model.Model):
     
     # static class variables
@@ -175,6 +212,8 @@ class Hex(pk.model.Model):
     dim: V2[int]  # width and height of the hex
     dim_float: V2[float]
     orientation: HexOrientation  # pointy or flat top
+
+    created: int = 0
 
     @staticmethod
     def calc_dim() -> tuple[V2[int], V2[float]]:
@@ -197,22 +236,60 @@ class Hex(pk.model.Model):
         Hex.size = size
         Hex.dim, Hex.dim_float = Hex.calc_dim()
         Hex.size_updated = True
-            
+
     def __init__(self, q: int, r: int) -> None:
         self._ax: Ax = Ax(V2(q, r))
-
-        chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
-        self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
+        self._attr: HexAttr = HexAttr(self)
 
         px: V2[int] = Ax.ax_to_px(self._ax)
         pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
-        self._element: HexSpriteElement = HexSpriteElement(pos=pos, img=HexSpriteStore.scaled_store[self._sprite_idx])
+        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain]
+        colour: V3[int] = self.determine_colour()
+        self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
+
+        Hex.created += 1  # keep track of how many hexes have been created, and report to main thread
+        inc: int = (HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()) // 100
+        if not (Hex.created % inc) :
+            time.sleep(0.00000001)  # microsleep to yield GIL to main thread
 
     def ax(self) -> Ax:
         return self._ax
     
+    def attr(self) -> HexAttr:
+        return self._attr
+    
     def element(self) -> HexSpriteElement:
         return self._element
+    
+    def get_terrain_colour(self) -> V3[int]:
+        c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
+        h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
+        height_mult: float = (self._attr.height - h1) / abs(h2 - h1)
+        colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
+        return V3(c1[0], c1[1], c1[2]) + colour_diff
+    
+    def get_shading_mult(self) -> float:
+        shading_mult = 1.0
+        if self._attr.terrain in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
+            return shading_mult
+        
+        gradient_2std: V2[float] = HexAttr.heightmap.get_gradient_std()
+        gradient_x: float = clip(HexAttr.heightmap.get_x_gradient_from_of(Ax.ax_to_of(self._ax)),
+                                 -gradient_2std.x(), gradient_2std.x())
+        gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(Ax.ax_to_of(self._ax)),
+                                 -gradient_2std.y(), gradient_2std.y())
+        
+        mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - SHADING_MULT))
+        shading_mult *= mult_x
+        mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - SHADING_MULT))
+        shading_mult *= mult_y
+
+        return shading_mult
+    
+    def determine_colour(self) -> V3[int]:
+        colour: V3[int] = self.get_terrain_colour()
+        colour = colour.to_float().scalar_mul(self.get_shading_mult()).to_int().min(V3(255, 255, 255)).max(V3(0, 0, 0))
+        return colour
     
     def update_element_rect(self) -> None:
         px: V2[int] = Ax.ax_to_px(self._ax)
@@ -220,10 +297,7 @@ class Hex(pk.model.Model):
         self._element.rect.size = Hex.dim.get()
 
     def update_element_image(self) -> None:
-        chunk_idx: V2[int] = HexStore.of_to_chunk_idx(Ax.ax_to_of(self._ax))
-        self._sprite_idx: int = (chunk_idx.x() + 6325 * chunk_idx.y()) % len(HexSpriteStore.scaled_store)
-        self._element.image = HexSpriteStore.scaled_store[self._sprite_idx]
-        # self._element.image = pg.transform.scale(HexSpriteStore._store[self._sprite_idx], (self._element.rect.width + 1, self._element.rect.height + 1))
+        self._element.image = HexSpriteStore.scaled_store[self._attr.terrain]
         pass
 
     def __str__(self) -> str:
@@ -492,17 +566,37 @@ class HexController(pk.model.Model):
     def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
         chunk.reset_bottomright()
+
+    @staticmethod
+    def init_store_job(hex_controller: "HexController") -> None:
+        hex_controller._store = HexStore()
+        hex_controller._store.fill_chunks()
+
+    def init_store(self, display: pg.Surface) -> None:
+        thread = Thread(target=self.init_store_job, args=[self])
+        thread.start()
+        hex_created: int = 0
+        display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), False)
+        while thread.is_alive():
+            if hex_created != Hex.created:
+                display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
+                hex_created = Hex.created
             
-    def __init__(self, view: "HexView") -> None:
+    def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)
-        # init Hex, HexSpriteStore, HexView and HexStore
+        display_message(display, "    > initialising hex")
         Hex.orientation = HEX_ORIENTATION
         Hex.set_size(HEX_MAX_SIZE)
+        display_message(display, "    > initialising hex attributes")
+        HexAttr.init_heightmap()
+        HexAttr.init_colours()
+        display_message(display, "    > initialising sprite store")
         HexSpriteStore.init_store()
+        display_message(display, "    > initialising hex store")
+        self._store: HexStore
+        self.init_store(display)
+        display_message(display, "    > initialising hex view")
         self._view: "HexView" = view
-        self._store: HexStore = HexStore()
-        self._store.fill_chunks()
-        # self._view.min_max_chunk_idx = self._view.get_min_max_chunk_idx(self._view.get_min_max_of())
         self.apply_to_all_hex_in_store(HexController.add_hex_to_view)
         
     def store(self) -> HexStore:

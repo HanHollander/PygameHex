@@ -12,6 +12,7 @@ from view.hex import HexView
 from model.hex import HexController
 from view.loading import display_message
 
+
 display_message(pynkie.display, "> initialising view...")
 init_scale: int = 1
 camera_width: int = SCREEN_WIDTH
@@ -22,7 +23,7 @@ hex_view: HexView = HexView(pk.view.Viewport(
 ))
 
 display_message(pynkie.display, "> initialising hex controller...")
-hex_controller: HexController = HexController(hex_view)  ## TODO TAKES LONG
+hex_controller: HexController = HexController(hex_view, pynkie.display)  ## TODO TAKES LONG
 
 display_message(pynkie.display, "> initialising main game model...")
 game = Game(hex_view, hex_controller)

@@ -117,7 +117,6 @@ class HexView(pk.view.ScaledView):
                 chunk.reset_bottomright()
                 updated = True
                 chunk.set_updated(True)
-            print(HexController.i, "update_and_add_single_chunk_to_surface", chunk.idx(), "filled:" + str(filled), "updated:" + str(updated))
             for x in range (HexChunk.nof_hexes):
                 for y in range(HexChunk.nof_hexes):
                     hex: Hex | None = chunk.hexes()[x][y]
@@ -129,7 +128,11 @@ class HexView(pk.view.ScaledView):
                         target_rect = pg.Rect(element.rect.x - self.chunk_surface_topleft.x(), 
                                               element.rect.y - self.chunk_surface_topleft.y(),  
                                               element.rect.width, element.rect.height)
-                        self.chunk_surface.blit(element.image, target_rect, None, 0)
+                        colour_image: pg.Surface = pg.Surface(element.image.get_size()).convert_alpha()
+                        colour_image.fill(element.colour.get())
+                        final_image: pg.Surface = element.image.copy()
+                        final_image.blit(colour_image, (0, 0), special_flags=pg.BLEND_RGBA_MULT)
+                        self.chunk_surface.blit(final_image, target_rect, None, 0)
             chunk_nr += 1
         self.flags.request_update_and_add_single_chunk_to_surface = len(self.chunks_to_be_drawn) > 0
             
