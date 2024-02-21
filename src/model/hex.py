@@ -280,9 +280,9 @@ class Hex(pk.model.Model):
                                  -gradient_2std.y(), gradient_2std.y())
         
         mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - SHADING_MULT))
-        shading_mult *= mult_x
+        shading_mult *= 1 / mult_x
         mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - SHADING_MULT))
-        shading_mult *= mult_y
+        shading_mult *= 1 / mult_y
 
         return shading_mult
     
@@ -576,11 +576,12 @@ class HexController(pk.model.Model):
         thread = Thread(target=self.init_store_job, args=[self])
         thread.start()
         hex_created: int = 0
-        display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), False)
+        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), False)
         while thread.is_alive():
             if hex_created != Hex.created:
-                display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
+                display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
                 hex_created = Hex.created
+        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
             
     def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)

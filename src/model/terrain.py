@@ -33,7 +33,7 @@ class TerrainColourMapping:
         C_FOREST: tuple[pg.Color, pg.Color] = (clr("#17270f"), clr("#5e7a47"))
         C_BEACH: tuple[pg.Color, pg.Color] = (clr("#ebeec3"), clr("#ebeec3"))
         C_SHALLOW_OCEAN: tuple[pg.Color, pg.Color] = (clr("#6281b9"), clr("#9ac2dd"))
-        C_DEEP_OCEAN: tuple[pg.Color, pg.Color] = (clr("#172236"), clr("#5471a7"))
+        C_DEEP_OCEAN: tuple[pg.Color, pg.Color] = (clr("#3a4f75"), clr("#5471a7"))
         C_VOID: tuple[pg.Color, pg.Color] = (clr("#000000"), clr("#000000"))
 
         self._mapping: dict[TerrainType, tuple[pg.Color, pg.Color]] = {
@@ -108,12 +108,12 @@ class TerrainHeightmap:
         continent_noise = normalise(continent0_noise * continent1_noise)
 
         # "raise" continents (skew distribution higher)
-        continent_noise **= 0.8  # TODO MAGIC VALUE
+        continent_noise **= CONTINENT_NOISE_SIZE_MODIF
 
-        # flatten peaks until max height is less than middle of H_HILL range
+        # flatten peaks until max height is less than H_HILL[1]
         mask: NDArray[bool, Any] = continent_noise > H_HILL[0]
-        max_height: float = H_HILL[1] # H_HILL[0] + ((H_HILL[1] - H_HILL[0]) / 2)
-        f: Callable[[NDArray[float, Any]], NDArray[float, Any]] = lambda x: x - ((x - H_HILL[0]) * 0.5)
+        max_height: float = H_HILL[1] 
+        f: Callable[[NDArray[float, Any]], NDArray[float, Any]] = lambda x: x - ((x - H_HILL[0]) * CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION)
         while np.max(continent_noise) > max_height:
             continent_noise: NDArray[float, Any] = np.where(mask, f(continent_noise), continent_noise)
 
@@ -134,12 +134,10 @@ class TerrainHeightmap:
         mountain_range_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN_RANGE_NOISE_FREQUENCY.get())
 
         # make ridges thicker
-        mountain_range_noise **= 0.8  # [0, 1]  # TODO magic value
+        mountain_range_noise **= MOUNTAIN_RANGE_NOISE_WIDTH_MODIF  # [0, 1] 
 
-
-        # mask = heightmap < H_DEEP_OCEAN[1] - ((H_DEEP_OCEAN[1] - H_DEEP_OCEAN[0]) / 8)
-        # mountain_range_noise = np.where(mask, 0.0, mountain_range_noise)
-        mountain_range_noise *= ((heightmap + 0.5) ** 4)  # TODO magic value
+        # mask with heightmap
+        mountain_range_noise *= ((heightmap + MOUNTAIN_MASK_SIZE_MODIF) ** MOUNTAIN_MASK_STRENGTH_MODIF)  # [0, ??]
 
         # ==== MOUNTAIN TERRAIN ====
         mountain0_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN0_NOISE_FREQUENCY.get())
