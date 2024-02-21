@@ -117,7 +117,6 @@ class HexView(pk.view.ScaledView):
                 chunk.reset_bottomright()
                 updated = True
                 chunk.set_updated(True)
-            print(HexController.i, "update_and_add_single_chunk_to_surface", chunk.idx(), "filled:" + str(filled), "updated:" + str(updated))
             for x in range (HexChunk.nof_hexes):
                 for y in range(HexChunk.nof_hexes):
                     hex: Hex | None = chunk.hexes()[x][y]

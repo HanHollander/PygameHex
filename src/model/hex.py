@@ -1,4 +1,6 @@
-from typing import Any, Callable, TYPE_CHECKING
+from threading import Thread
+import time
+from typing import Any, Callable, TYPE_CHECKING, Iterable, Mapping
 from model.terrain import TerrainHeightmap, TerrainColourMapping, TerrainType
 import pygame as pg
 import pynkie as pk
@@ -211,6 +213,8 @@ class Hex(pk.model.Model):
     dim_float: V2[float]
     orientation: HexOrientation  # pointy or flat top
 
+    created: int = 0
+
     @staticmethod
     def calc_dim() -> tuple[V2[int], V2[float]]:
         match Hex.orientation:
@@ -232,8 +236,31 @@ class Hex(pk.model.Model):
         Hex.size = size
         Hex.dim, Hex.dim_float = Hex.calc_dim()
         Hex.size_updated = True
-            
 
+    def __init__(self, q: int, r: int) -> None:
+        self._ax: Ax = Ax(V2(q, r))
+        self._attr: HexAttr = HexAttr(self)
+
+        px: V2[int] = Ax.ax_to_px(self._ax)
+        pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
+        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain]
+        colour: V3[int] = self.determine_colour()
+        self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
+
+        Hex.created += 1  # keep track of how many hexes have been created, and report to main thread
+        inc: int = (HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()) // 100
+        if not (Hex.created % inc) :
+            time.sleep(0.00000001)  # microsleep to yield GIL to main thread
+
+    def ax(self) -> Ax:
+        return self._ax
+    
+    def attr(self) -> HexAttr:
+        return self._attr
+    
+    def element(self) -> HexSpriteElement:
+        return self._element
+    
     def get_terrain_colour(self) -> V3[int]:
         c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
         h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
@@ -241,8 +268,6 @@ class Hex(pk.model.Model):
         colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
         return V3(c1[0], c1[1], c1[2]) + colour_diff
     
-
-
     def get_shading_mult(self) -> float:
         shading_mult = 1.0
         if self._attr.terrain in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
@@ -265,25 +290,6 @@ class Hex(pk.model.Model):
         colour: V3[int] = self.get_terrain_colour()
         colour = colour.to_float().scalar_mul(self.get_shading_mult()).to_int().min(V3(255, 255, 255)).max(V3(0, 0, 0))
         return colour
-
-    def __init__(self, q: int, r: int) -> None:
-        self._ax: Ax = Ax(V2(q, r))
-        self._attr: HexAttr = HexAttr(self)
-
-        px: V2[int] = Ax.ax_to_px(self._ax)
-        pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
-        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain]
-        colour: V3[int] = self.determine_colour()
-        self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
-
-    def ax(self) -> Ax:
-        return self._ax
-    
-    def attr(self) -> HexAttr:
-        return self._attr
-    
-    def element(self) -> HexSpriteElement:
-        return self._element
     
     def update_element_rect(self) -> None:
         px: V2[int] = Ax.ax_to_px(self._ax)
@@ -560,6 +566,21 @@ class HexController(pk.model.Model):
     def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
         chunk.reset_bottomright()
+
+    @staticmethod
+    def init_store_job(hex_controller: "HexController") -> None:
+        hex_controller._store = HexStore()
+        hex_controller._store.fill_chunks()
+
+    def init_store(self, display: pg.Surface) -> None:
+        thread = Thread(target=self.init_store_job, args=[self])
+        thread.start()
+        hex_created: int = 0
+        display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), False)
+        while thread.is_alive():
+            if hex_created != Hex.created:
+                display_message(display, "    > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
+                hex_created = Hex.created
             
     def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)
@@ -572,8 +593,8 @@ class HexController(pk.model.Model):
         display_message(display, "    > initialising sprite store")
         HexSpriteStore.init_store()
         display_message(display, "    > initialising hex store")
-        self._store: HexStore = HexStore()
-        self._store.fill_chunks()
+        self._store: HexStore
+        self.init_store(display)
         display_message(display, "    > initialising hex view")
         self._view: "HexView" = view
         self.apply_to_all_hex_in_store(HexController.add_hex_to_view)

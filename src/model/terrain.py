@@ -112,7 +112,7 @@ class TerrainHeightmap:
 
         # flatten peaks until max height is less than middle of H_HILL range
         mask: NDArray[bool, Any] = continent_noise > H_HILL[0]
-        max_height: float = H_HILL[0] + ((H_HILL[1] - H_HILL[0]) / 2)
+        max_height: float = H_HILL[1] # H_HILL[0] + ((H_HILL[1] - H_HILL[0]) / 2)
         f: Callable[[NDArray[float, Any]], NDArray[float, Any]] = lambda x: x - ((x - H_HILL[0]) * 0.5)
         while np.max(continent_noise) > max_height:
             continent_noise: NDArray[float, Any] = np.where(mask, f(continent_noise), continent_noise)
@@ -136,7 +136,10 @@ class TerrainHeightmap:
         # make ridges thicker
         mountain_range_noise **= 0.8  # [0, 1]  # TODO magic value
 
-        mountain_range_noise *= ((heightmap + 0.35) ** 2.5)  # TODO magic value
+
+        # mask = heightmap < H_DEEP_OCEAN[1] - ((H_DEEP_OCEAN[1] - H_DEEP_OCEAN[0]) / 8)
+        # mountain_range_noise = np.where(mask, 0.0, mountain_range_noise)
+        mountain_range_noise *= ((heightmap + 0.5) ** 4)  # TODO magic value
 
         # ==== MOUNTAIN TERRAIN ====
         mountain0_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN0_NOISE_FREQUENCY.get())
@@ -152,11 +155,12 @@ class TerrainHeightmap:
         
         # mask with mountain range pattern
         mountains *= mountain_range_noise
+        mountains **= 0.9
         mountains = normalise(mountains)
 
         # zero all values below 1/8th of deep ocean range below shallow ocean
         mask = mountains < H_DEEP_OCEAN[1] - ((H_DEEP_OCEAN[1] - H_DEEP_OCEAN[0]) / 8)
-        mountains = np.where(mask, 0, mountains)
+        mountains = np.where(mask, 0.0, mountains)
 
         # ==== HEIGHTMAP COMBINED ====
         # take the maximum height of heightmap or mountain_noise
@@ -172,12 +176,12 @@ class TerrainHeightmap:
         self._gradient_y_std: float = float(np.std(self._gradient_y))
 
     def get_height_from_of(self, of: V2[int]) -> float:
-        return  self._map[of.x()][of.y()] if of.x() < len(self._map) and of.y() < len(self._map[0]) else 0.0
+        return  self._map[of.x()][of.y()]
     
     def get_x_gradient_from_of(self, of: V2[int]) -> float:   
-        return self._gradient_x[of.x()][of.y()] if of.x() < len(self._map) and of.y() < len(self._map[0]) else 0.0
+        return self._gradient_x[of.x()][of.y()]
     def get_y_gradient_from_of(self, of: V2[int]) -> float:   
-        return self._gradient_y[of.x()][of.y()] if of.x() < len(self._map) and of.y() < len(self._map[0]) else 0.0
+        return self._gradient_y[of.x()][of.y()]
     def get_gradient_std(self) -> V2[float]:
         return V2(2.0 * self._gradient_x_std, 2.0 * self._gradient_y_std)
     
