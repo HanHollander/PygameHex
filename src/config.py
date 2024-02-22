@@ -15,6 +15,9 @@ class TerrainLayerShown(Enum):
     MOUNTAINS = 2
     HILLS = 3
     HEIGHTMAP = 4
+    CONTINENTS_MOUNTAINS = 5
+    CONTINENTS_HILLS = 6
+    MOUNTAINS_HILLS = 7
 
 class Cfg:
 
@@ -116,8 +119,11 @@ class Cfg:
     HILL0_NOISE_FREQUENCY: V2[int]  # TODO
     HILL1_NOISE_FREQUENCY: V2[int]  # TODO 
     HILL2_NOISE_FREQUENCY: V2[int]  # TODO
+    HILL_RANGE_NOISE_WIDTH_MODIF: float                                 # lower is wider ranges
     HILL_MASK_SIZE_MODIF: float                                         # higher is larger mask
     HILL_MASK_STRENGTH_MODIF: float                                     # higher is stronger mask
+    HILL_NOISE_PEAK_FLATTENING_RESOLUTION: float                        # lower is higher resolution
+    HILL_MAX_HEIGHT_DIV: float                                          # higher is higher hills
 
     TERRAIN_LAYER_SHOWN: TerrainLayerShown
 
@@ -163,8 +169,11 @@ class Cfg:
         Cfg.HILL0_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(8)
         Cfg.HILL1_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(2)
         Cfg.HILL2_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(1)
+        Cfg.HILL_RANGE_NOISE_WIDTH_MODIF = hills.getfloat("HILL_RANGE_NOISE_WIDTH_MODIF")
+        Cfg.HILL_NOISE_PEAK_FLATTENING_RESOLUTION = hills.getfloat("HILL_NOISE_PEAK_FLATTENING_RESOLUTION")
         Cfg.HILL_MASK_SIZE_MODIF = hills.getfloat("HILL_MASK_SIZE_MODIF")
         Cfg.HILL_MASK_STRENGTH_MODIF = hills.getfloat("HILL_MASK_STRENGTH_MODIF")
+        Cfg.HILL_MAX_HEIGHT_DIV = hills.getfloat("HILL_MAX_HEIGHT_DIV")
 
         terrain: SectionProxy = config["heightmap.terrain"]
         Cfg.TERRAIN_LAYER_SHOWN = TerrainLayerShown(terrain.getint("TERRAIN_LAYER_SHOWN"))

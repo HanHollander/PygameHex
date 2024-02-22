@@ -28,12 +28,12 @@ class TerrainColourMapping:
         clr = pg.Color
         C_SNOW: tuple[pg.Color, pg.Color] = (clr("#fffafa"), clr("#fffafa"))        
         # C_SNOW: tuple[pg.Color, pg.Color] = (clr("#353535"), clr("#fffafa"))
-        C_MOUNTAIN: tuple[pg.Color, pg.Color] = (clr("#7f867e"), clr("#d8d8d8"))
-        C_HILL: tuple[pg.Color, pg.Color] = (clr("#293b21"), clr("#718873"))
+        C_MOUNTAIN: tuple[pg.Color, pg.Color] = (clr("#62795f"), clr("#9ba89b"))
+        C_HILL: tuple[pg.Color, pg.Color] = (clr("#293b21"), clr("#4a6843"))
         C_FOREST: tuple[pg.Color, pg.Color] = (clr("#17270f"), clr("#5e7a47"))
         C_BEACH: tuple[pg.Color, pg.Color] = (clr("#ebeec3"), clr("#ebeec3"))
-        C_SHALLOW_OCEAN: tuple[pg.Color, pg.Color] = (clr("#6281b9"), clr("#9ac2dd"))
-        C_DEEP_OCEAN: tuple[pg.Color, pg.Color] = (clr("#3a4f75"), clr("#5471a7"))
+        C_SHALLOW_OCEAN: tuple[pg.Color, pg.Color] = (clr("#2e446d"), clr("#4c728b"))
+        C_DEEP_OCEAN: tuple[pg.Color, pg.Color] = (clr("#0f192c"), clr("#213150"))
         C_VOID: tuple[pg.Color, pg.Color] = (clr("#000000"), clr("#000000"))
 
         self._mapping: dict[TerrainType, tuple[pg.Color, pg.Color]] = {
@@ -157,8 +157,12 @@ class TerrainHeightmap:
         mountains = normalise(mountains)
 
         # ==== HILLS RANGES ==== #
-        hill_range_noise = mountain_range_noise ** 0.6
-        
+        # make hill ranges with the same resolution as continents
+        hill_range_noise: NDArray[float, Any] = normal_noise(Cfg.CONTINENT_NOISE_FREQUENCY.get())
+
+        # increase or decrease width ("amount") of hills
+        hill_range_noise **= Cfg.HILL_RANGE_NOISE_WIDTH_MODIF
+
         # mask with heightmap
         hill_range_noise *= ((continents + Cfg.HILL_MASK_SIZE_MODIF) ** Cfg.HILL_MASK_STRENGTH_MODIF)  # [0, ??]
 
@@ -178,12 +182,11 @@ class TerrainHeightmap:
         hills *= hill_range_noise
         hills = normalise(hills)
 
-        # flatten peaks until max height is less than H_HILL[1]
+        # flatten peaks until max height is less than certain value
         mask: NDArray[bool, Any] = hills > H_HILL[0]
-        max_height: float = H_HILL[1] - ((H_HILL[1] - H_HILL[0]) / 5)  # TODO magic
-        f: Callable[[NDArray[float, Any]], NDArray[float, Any]] = lambda x: x - ((x - H_HILL[0]) * 0.1)
+        max_height: float = H_HILL[1] - ((H_HILL[1] - H_HILL[0]) / Cfg.HILL_MAX_HEIGHT_DIV)
         while np.max(hills) > max_height:
-            hills: NDArray[float, Any] = np.where(mask, f(hills), hills)
+            hills: NDArray[float, Any] = np.where(mask, flatten(hills, H_HILL[0], Cfg.HILL_NOISE_PEAK_FLATTENING_RESOLUTION), hills)
 
         # ==== HEIGHTMAP COMBINED ==== #
         # take the maximum height of heightmap or mountain_noise
@@ -197,6 +200,12 @@ class TerrainHeightmap:
                 heightmap = hills
             case TerrainLayerShown.HEIGHTMAP:
                 heightmap =  np.maximum(np.maximum(continents, mountains), hills)
+            case TerrainLayerShown.CONTINENTS_MOUNTAINS:
+                heightmap =  np.maximum(continents, mountains)
+            case TerrainLayerShown.CONTINENTS_HILLS:
+                heightmap =  np.maximum(continents, hills)
+            case TerrainLayerShown.MOUNTAINS_HILLS:
+                heightmap =  np.maximum(mountains, hills)
            
         # ==== SET MAP AND GRADIENTS ==== #
         self._map: NDArray[float, Any] = heightmap
