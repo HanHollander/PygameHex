@@ -8,7 +8,7 @@ import numpy as np
 
 from math import ceil, floor, sqrt, cos, sin, pi
 from util import V2, V3, clip, even
-from config import *
+from config import Cfg, HexOrientation
 from view.loading import display_message
 
 if TYPE_CHECKING:
@@ -173,7 +173,7 @@ class HexSpriteStore:
 
     @staticmethod
     def init_store() -> None:
-        dim: V2[int] = Hex.calc_dim_from_size(HEX_INIT_SPRITE_SIZE)[0]
+        dim: V2[int] = Hex.calc_dim_from_size(Cfg.HEX_INIT_SPRITE_SIZE)[0]
         HexSpriteStore._store = {}
         HexSpriteStore.scaled_store = {}
         for terrain in TerrainType:
@@ -248,7 +248,7 @@ class Hex(pk.model.Model):
         self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
 
         Hex.created += 1  # keep track of how many hexes have been created, and report to main thread
-        inc: int = (HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()) // 100
+        inc: int = (Cfg.HEX_NOF_HEXES.x() * Cfg.HEX_NOF_HEXES.y()) // 100
         if not (Hex.created % inc) :
             time.sleep(0.00000001)  # microsleep to yield GIL to main thread
 
@@ -257,9 +257,13 @@ class Hex(pk.model.Model):
     
     def attr(self) -> HexAttr:
         return self._attr
+    def set_attr(self, attr: HexAttr) -> None:
+        self._attr = attr
     
     def element(self) -> HexSpriteElement:
         return self._element
+    def set_colour(self, colour: V3[int]) -> None:
+        self._element.colour = colour
     
     def get_terrain_colour(self) -> V3[int]:
         c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
@@ -279,9 +283,9 @@ class Hex(pk.model.Model):
         gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(Ax.ax_to_of(self._ax)),
                                  -gradient_2std.y(), gradient_2std.y())
         
-        mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - SHADING_MULT))
+        mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - Cfg.SHADING_MULT))
         shading_mult *= 1 / mult_x
-        mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - SHADING_MULT))
+        mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - Cfg.SHADING_MULT))
         shading_mult *= 1 / mult_y
 
         return shading_mult
@@ -308,7 +312,7 @@ class HexChunk:
 
     # static class variables:
     size_px: V2[int]
-    nof_hexes: int = HEX_INIT_CHUNK_SIZE
+    nof_hexes: int = Cfg.HEX_INIT_CHUNK_SIZE
     size_overflow: int = 0
 
     @staticmethod
@@ -332,7 +336,7 @@ class HexChunk:
 
         old_nof_hexes: int = HexChunk.nof_hexes
         if HexChunk.size_overflow == 0:  # only if no overflow attempt to change
-            HexChunk.nof_hexes = min(HEX_MAX_CHUNK_SIZE, max(HEX_MIN_CHUNK_SIZE, nof_hexes))
+            HexChunk.nof_hexes = min(Cfg.HEX_MAX_CHUNK_SIZE, max(Cfg.HEX_MIN_CHUNK_SIZE, nof_hexes))
 
         if old_nof_hexes != HexChunk.nof_hexes:
             return True
@@ -477,12 +481,12 @@ class HexStore:
         return V2(floor(of.x() / HexChunk.nof_hexes), floor(of.y() / HexChunk.nof_hexes))
 
     def __init__(self) -> None:
-        HexStore.set_nof_chunks(HEX_INIT_STORE_SIZE)
-        HexChunk.nof_hexes = HEX_INIT_CHUNK_SIZE
+        HexStore.set_nof_chunks(Cfg.HEX_INIT_STORE_SIZE)
+        HexChunk.nof_hexes = Cfg.HEX_INIT_CHUNK_SIZE
 
-        assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == HEX_NOF_HEXES
+        assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == Cfg.HEX_NOF_HEXES
 
-        HexChunk.set_size_overflow(HEX_INIT_CHUNK_OVERFLOW)
+        HexChunk.set_size_overflow(Cfg.HEX_INIT_CHUNK_OVERFLOW)
         HexChunk.set_size_px()
 
         self._hexes: list[list[Hex]] = [[Hex(Ax.of_to_ax(V2(x, y)).q(), Ax.of_to_ax(V2(x, y)).r()) for y in range(HexStore.nof_chunks.y() * HexChunk.nof_hexes)] for x in range(HexStore.nof_chunks.x() * HexChunk.nof_hexes)]
@@ -563,6 +567,12 @@ class HexController(pk.model.Model):
             hex.update_element_image()
 
     @staticmethod
+    def update_attr_and_colour(_: "HexController | None", hex: Hex) -> None:
+        hex.set_attr(HexAttr(hex))
+        hex.set_colour(hex.determine_colour())
+
+
+    @staticmethod
     def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
         chunk.reset_bottomright()
@@ -576,18 +586,18 @@ class HexController(pk.model.Model):
         thread = Thread(target=self.init_store_job, args=[self])
         thread.start()
         hex_created: int = 0
-        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), False)
+        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(Cfg.HEX_NOF_HEXES.x() * Cfg.HEX_NOF_HEXES.y()), False)
         while thread.is_alive():
             if hex_created != Hex.created:
-                display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
+                display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(Cfg.HEX_NOF_HEXES.x() * Cfg.HEX_NOF_HEXES.y()), True)
                 hex_created = Hex.created
-        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(HEX_NOF_HEXES.x() * HEX_NOF_HEXES.y()), True)
+        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(Cfg.HEX_NOF_HEXES.x() * Cfg.HEX_NOF_HEXES.y()), True)
             
     def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)
         display_message(display, "    > initialising hex")
-        Hex.orientation = HEX_ORIENTATION
-        Hex.set_size(HEX_MAX_SIZE)
+        Hex.orientation = Cfg.HEX_ORIENTATION
+        Hex.set_size(Cfg.HEX_MAX_SIZE)
         display_message(display, "    > initialising hex attributes")
         HexAttr.init_heightmap()
         HexAttr.init_colours()
@@ -647,8 +657,8 @@ class HexController(pk.model.Model):
             self.apply_to_all_hex_in_chunk(chunk, f)
 
     def apply_to_all_hex_in_chunk(self, chunk: HexChunk, f: Callable[["HexController | None", Hex], None]) -> None:
-        for x in range(HEX_INIT_CHUNK_SIZE):
-            for y in range(HEX_INIT_CHUNK_SIZE):
+        for x in range(Cfg.HEX_INIT_CHUNK_SIZE):
+            for y in range(Cfg.HEX_INIT_CHUNK_SIZE):
                 hex: Hex | None = chunk.get_hex(V2(x, y))
                 if isinstance(hex, Hex): f(self, hex)
 
@@ -660,3 +670,11 @@ class HexController(pk.model.Model):
         ax: Ax = Ax.px_to_ax_offset(px, offset)
         of: V2[int] = Ax.ax_to_of(ax)
         return self._store.get_hex_at_of(of) 
+    
+    def reset_map(self) -> None:
+        Cfg.read_terrain_config()
+        HexAttr.heightmap = TerrainHeightmap()
+        self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
+        self._view.flags.init = True
+        self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
+        pass

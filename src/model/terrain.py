@@ -55,8 +55,8 @@ class TerrainColourMapping:
 class TerrainHeightmap:
     
     def __init__(self) -> None:
-        H_SNOW = V2(0.95, 999.0)
-        H_MOUNTAIN = V2(0.75, H_SNOW[0])
+        # H_SNOW = V2(0.95, 999.0)
+        H_MOUNTAIN = V2(0.75, 999.0)
         H_HILL = V2(0.50, H_MOUNTAIN[0])
         H_SHALLOW_OCEAN = V2(0.45, H_HILL[0])
         H_DEEP_OCEAN = V2(0.0, H_SHALLOW_OCEAN[0])
@@ -70,7 +70,6 @@ class TerrainHeightmap:
         # H_VOID = V2(-999.0, H_DEEP_OCEAN[0])
 
         self._mapping: dict[TerrainType, V2[float]] = {
-            TerrainType.SNOW: H_SNOW,
             TerrainType.MOUNTAIN: H_MOUNTAIN,
             TerrainType.HILL: H_HILL,
             TerrainType.SHALLOW_OCEAN: H_SHALLOW_OCEAN,
@@ -78,7 +77,7 @@ class TerrainHeightmap:
             TerrainType.VOID: H_VOID
         }
 
-        noise_dim: V2[int] = V2(HEX_NOF_HEXES.x(), HEX_NOF_HEXES.y())
+        noise_dim: V2[int] = V2(Cfg.HEX_NOF_HEXES.x(), Cfg.HEX_NOF_HEXES.y())
 
         def normal_noise(res: tuple[int, int]) -> NDArray: # type: ignore
             noise: NDArray[float, Any] = pnp.generate_perlin_noise_2d( # type: ignore
@@ -99,87 +98,86 @@ class TerrainHeightmap:
             noise += 0.5  # [-0.5, 0.5]
             noise *= 2  # [-1, 1]
             return normalise(noise)  # [0, 1]
+        
+        def flatten(noise: Any, min_height: float, res: float) -> Any:
+            return noise - ((noise - min_height) * res)
 
         # ==== CONTINENTS ==== #
-        continent0_noise: NDArray[float, Any] = normal_noise(CONTINENT_NOISE_FREQUENCY.get())
-        continent1_noise: NDArray[float, Any] = normal_noise(CONTINENT_NOISE_FREQUENCY.get())
+        continent0_noise: NDArray[float, Any] = normal_noise(Cfg.CONTINENT_NOISE_FREQUENCY.get())
+        continent1_noise: NDArray[float, Any] = normal_noise(Cfg.CONTINENT_NOISE_FREQUENCY.get())
 
         # combine two noise patterns
         continent_noise = normalise(continent0_noise * continent1_noise)
 
         # "raise" continents (skew distribution higher)
-        continent_noise **= CONTINENT_NOISE_SIZE_MODIF
-
-        # flatten peaks until max height is less than H_HILL[1]
-        mask: NDArray[bool, Any] = continent_noise > H_HILL[0]
-        max_height: float = H_HILL[1] - ((H_HILL[1] - H_HILL[0]) / 4)  # TODO magic
-        f: Callable[[NDArray[float, Any]], NDArray[float, Any]] = lambda x: x - ((x - H_HILL[0]) * CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION)
-        while np.max(continent_noise) > max_height:
-            continent_noise: NDArray[float, Any] = np.where(mask, f(continent_noise), continent_noise)
+        continent_noise **= Cfg.CONTINENT_NOISE_SIZE_MODIF
 
         # ==== TERRAIN ==== #
-        terrain0_noise: NDArray[float, Any] = normal_noise(TERRAIN0_NOISE_FREQUENCY.get())
-        terrain1_noise: NDArray[float, Any] = normal_noise(TERRAIN1_NOISE_FREQUENCY.get())
-        terrain2_noise: NDArray[float, Any] = normal_noise(TERRAIN2_NOISE_FREQUENCY.get())
+        terrain0_noise: NDArray[float, Any] = normal_noise(Cfg.TERRAIN0_NOISE_FREQUENCY.get())
+        terrain1_noise: NDArray[float, Any] = normal_noise(Cfg.TERRAIN1_NOISE_FREQUENCY.get())
+        terrain2_noise: NDArray[float, Any] = normal_noise(Cfg.TERRAIN2_NOISE_FREQUENCY.get())
 
-        # ==== HEIGHTMAP WITHOUT MOUNTAINS ==== #
+        # ==== CONTINENTS ==== #
         # combine weighted noise patterns (total weight == 1)
-        heightmap: NDArray[float, Any] = \
-            (CONTINENT_NOISE_WEIGHT * continent_noise) + \
-            (TERRAIN0_NOISE_WEIGHT * terrain0_noise) + \
-            (TERRAIN1_NOISE_WEIGHT * terrain1_noise) + \
-            (TERRAIN2_NOISE_WEIGHT * terrain2_noise)
+        continents: NDArray[float, Any] = \
+            (Cfg.CONTINENT_NOISE_WEIGHT * continent_noise) + \
+            (Cfg.TERRAIN0_NOISE_WEIGHT * terrain0_noise) + \
+            (Cfg.TERRAIN1_NOISE_WEIGHT * terrain1_noise) + \
+            (Cfg.TERRAIN2_NOISE_WEIGHT * terrain2_noise)
+
+        # flatten peaks until max height is less than certain value
+        mask: NDArray[bool, Any] = continents > H_HILL[0]
+        max_height: float = H_HILL[1] - ((H_HILL[1] - H_HILL[0]) / Cfg.CONTINENT_MAX_HEIGHT_DIV)
+        while np.max(continents) > max_height:
+            continents: NDArray[float, Any] = np.where(mask, flatten(continents, H_HILL[0], Cfg.CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION), continents)
     
         # ==== MOUNTAIN RANGES ==== #
-        mountain_range_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN_RANGE_NOISE_FREQUENCY.get())
+        mountain_range_noise: NDArray[float, Any] = ridge_noise(Cfg.MOUNTAIN_RANGE_NOISE_FREQUENCY.get())
 
         # make ridges thicker
-        mountain_range_noise **= MOUNTAIN_RANGE_NOISE_WIDTH_MODIF  # [0, 1] 
+        mountain_range_noise **= Cfg.MOUNTAIN_RANGE_NOISE_WIDTH_MODIF  # [0, 1] 
 
         # mask with heightmap
-        mountain_range_noise *= ((heightmap + MOUNTAIN_MASK_SIZE_MODIF) ** MOUNTAIN_MASK_STRENGTH_MODIF)  # [0, ??]
+        mountain_range_noise *= ((continents + Cfg.MOUNTAIN_MASK_SIZE_MODIF) ** Cfg.MOUNTAIN_MASK_STRENGTH_MODIF)  # [0, ??]
 
         # ==== MOUNTAIN TERRAIN ==== #
-        mountain0_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN0_NOISE_FREQUENCY.get())
-        mountain1_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN1_NOISE_FREQUENCY.get())
-        mountain2_noise: NDArray[float, Any] = ridge_noise(MOUNTAIN2_NOISE_FREQUENCY.get())
+        mountain0_noise: NDArray[float, Any] = ridge_noise(Cfg.MOUNTAIN0_NOISE_FREQUENCY.get())
+        mountain1_noise: NDArray[float, Any] = ridge_noise(Cfg.MOUNTAIN1_NOISE_FREQUENCY.get())
+        mountain2_noise: NDArray[float, Any] = ridge_noise(Cfg.MOUNTAIN2_NOISE_FREQUENCY.get())
 
         # ==== MOUNTAINS ==== #
         # combine weighted noise patterns (total weight == 1)
         mountains: NDArray[float, Any] = \
-            (MOUNTAIN0_NOISE_WEIGHT * mountain0_noise) + \
-            (MOUNTAIN1_NOISE_WEIGHT * mountain1_noise) + \
-            (MOUNTAIN2_NOISE_WEIGHT * mountain2_noise)
+            (Cfg.MOUNTAIN0_NOISE_WEIGHT * mountain0_noise) + \
+            (Cfg.MOUNTAIN1_NOISE_WEIGHT * mountain1_noise) + \
+            (Cfg.MOUNTAIN2_NOISE_WEIGHT * mountain2_noise)
         
         # mask with mountain range pattern
         mountains *= mountain_range_noise
         mountains = normalise(mountains)
 
-
         # ==== HILLS RANGES ==== #
         hill_range_noise = mountain_range_noise ** 0.6
         
         # mask with heightmap
-        hill_range_noise *= ((heightmap + HILL_MASK_SIZE_MODIF) ** HILL_MASK_STRENGTH_MODIF)  # [0, ??]
-
+        hill_range_noise *= ((continents + Cfg.HILL_MASK_SIZE_MODIF) ** Cfg.HILL_MASK_STRENGTH_MODIF)  # [0, ??]
 
         # ==== HILLS TERRAIN ==== #
-        hill0_noise: NDArray[float, Any] = normal_noise(HILL0_NOISE_FREQUENCY.get())
-        hill1_noise: NDArray[float, Any] = normal_noise(HILL1_NOISE_FREQUENCY.get())
-        hill2_noise: NDArray[float, Any] = normal_noise(HILL2_NOISE_FREQUENCY.get())
+        hill0_noise: NDArray[float, Any] = normal_noise(Cfg.HILL0_NOISE_FREQUENCY.get())
+        hill1_noise: NDArray[float, Any] = normal_noise(Cfg.HILL1_NOISE_FREQUENCY.get())
+        hill2_noise: NDArray[float, Any] = normal_noise(Cfg.HILL2_NOISE_FREQUENCY.get())
 
         # ==== HILLS ==== #
         # combine weighted noise patterns (total weight == 1)
         hills: NDArray[float, Any] = \
-            (HILL0_NOISE_WEIGHT * hill0_noise) + \
-            (HILL1_NOISE_WEIGHT * hill1_noise) + \
-            (HILL2_NOISE_WEIGHT * hill2_noise)
+            (Cfg.HILL0_NOISE_WEIGHT * hill0_noise) + \
+            (Cfg.HILL1_NOISE_WEIGHT * hill1_noise) + \
+            (Cfg.HILL2_NOISE_WEIGHT * hill2_noise)
         
         # mask with hills range pattern
         hills *= hill_range_noise
         hills = normalise(hills)
 
-        
         # flatten peaks until max height is less than H_HILL[1]
         mask: NDArray[bool, Any] = hills > H_HILL[0]
         max_height: float = H_HILL[1] - ((H_HILL[1] - H_HILL[0]) / 5)  # TODO magic
@@ -187,20 +185,22 @@ class TerrainHeightmap:
         while np.max(hills) > max_height:
             hills: NDArray[float, Any] = np.where(mask, f(hills), hills)
 
-
-
-
-
         # ==== HEIGHTMAP COMBINED ==== #
         # take the maximum height of heightmap or mountain_noise
-        heightmap_combined: NDArray[float, Any] = np.maximum(np.maximum(heightmap, mountains), hills)
-        # heightmap_combined: NDArray[float, Any] = np.maximum(heightmap, hills)
-
-        # heightmap_combined = hills
-
+        heightmap: NDArray[float, Any]
+        match Cfg.TERRAIN_LAYER_SHOWN:
+            case TerrainLayerShown.CONTINENTS:
+                heightmap = continents
+            case TerrainLayerShown.MOUNTAINS:
+                heightmap = mountains
+            case TerrainLayerShown.HILLS:
+                heightmap = hills
+            case TerrainLayerShown.HEIGHTMAP:
+                heightmap =  np.maximum(np.maximum(continents, mountains), hills)
+           
         # ==== SET MAP AND GRADIENTS ==== #
-        self._map: NDArray[float, Any] = heightmap_combined
-        gradient: list[NDArray[float, Any]] = np.gradient(heightmap_combined)
+        self._map: NDArray[float, Any] = heightmap
+        gradient: list[NDArray[float, Any]] = np.gradient(heightmap)
         self._gradient_x: NDArray[float, Any] = gradient[0]
         self._gradient_y: NDArray[float, Any] = gradient[1]
         self._gradient_x_std: float = float(np.std(self._gradient_x))

@@ -1,5 +1,5 @@
 import sys
-from config import MAX_FRAMERATE, HexOrientation
+from config import Cfg
 import pygame as pg
 import pynkie as pk
 
@@ -15,7 +15,7 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.min_fps: int = MAX_FRAMERATE
+        self.min_fps: int = Cfg.MAX_FRAMERATE
         self.max_fps: int = 0
         # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
 
@@ -47,8 +47,10 @@ class Game(pk.model.Model):
             pg.quit()
             sys.exit()
         if event.key == pg.K_f:
-            self.min_fps = MAX_FRAMERATE
+            self.min_fps = Cfg.MAX_FRAMERATE
             self.max_fps = 0
+        if event.key == pg.K_r:
+            self.hex_controller.reset_map()
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)

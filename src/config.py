@@ -1,74 +1,173 @@
+from configparser import ConfigParser, SectionProxy
 from enum import Enum
+from math import isclose
+from pathlib import Path
 
 from util import V2
 
 
-# setup
-DEBUG_INFO: bool = True
-MAX_FRAMERATE: int = 512
-USE_DEFAULT_CURSOR: bool = True
-
-# screen
-SCREEN_WIDTH: int = 1920
-SCREEN_HEIGHT: int = 1080
-
-# hex model
 class HexOrientation(Enum):
     FLAT = 1
     POINTY = 2
-HEX_INIT_SPRITE_SIZE: int = 256
-HEX_INIT_CHUNK_SIZE: int = 2
-HEX_INIT_CHUNK_OVERFLOW = -1
-HEX_MIN_CHUNK_SIZE: int = 2
-HEX_MAX_CHUNK_SIZE: int = 16
-HEX_INIT_STORE_SIZE: V2[int] = V2(128, 80)
-HEX_ORIENTATION: HexOrientation = HexOrientation.POINTY
-HEX_NOF_HEXES: V2[int] = V2(HEX_INIT_CHUNK_SIZE, HEX_INIT_CHUNK_SIZE) * HEX_INIT_STORE_SIZE
 
-# hex view
-DRAG_MOVE_FACTOR: float = 1.5
-HEX_MIN_SIZE: int = 4
-HEX_MAX_SIZE: int = HEX_INIT_SPRITE_SIZE
-ZOOM_STEP_FACTOR: float = 2
-ZOOM_MOVE_FACTOR: float = .5
-CHUNKS_PER_FRAME: int = 1
+class TerrainLayerShown(Enum):
+    CONTINENTS = 1
+    MOUNTAINS = 2
+    HILLS = 3
+    HEIGHTMAP = 4
 
-# heightmap
-CONTINENT_NOISE_FREQUENCY: V2[int] = V2(4, 2)
-CONTINENT_NOISE_WEIGHT: float = 0.85
-TERRAIN0_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(8)
-TERRAIN0_NOISE_WEIGHT: float = 0.075
-TERRAIN1_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(4)
-TERRAIN1_NOISE_WEIGHT: float = 0.05
-TERRAIN2_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(2)
-TERRAIN2_NOISE_WEIGHT: float = 0.025
-assert CONTINENT_NOISE_WEIGHT + TERRAIN0_NOISE_WEIGHT + TERRAIN1_NOISE_WEIGHT + TERRAIN2_NOISE_WEIGHT == 1
+class Cfg:
 
-CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION: float = 0.1  # lower is higher resolution
-CONTINENT_NOISE_SIZE_MODIF: float = 0.8  # higher is larger continents
+    @staticmethod
+    def init() -> None:
+        Cfg.read_general_config()
+        Cfg.read_hex_config()
+        Cfg.read_terrain_config()
 
-MOUNTAIN_RANGE_NOISE_FREQUENCY: V2[int] = V2(8, 4)
-MOUNTAIN0_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(8)
-MOUNTAIN0_NOISE_WEIGHT: float = 0.5
-MOUNTAIN1_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(4)
-MOUNTAIN1_NOISE_WEIGHT: float = 0.4
-MOUNTAIN2_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(2)
-MOUNTAIN2_NOISE_WEIGHT: float = 0.1
-assert MOUNTAIN0_NOISE_WEIGHT + MOUNTAIN1_NOISE_WEIGHT + MOUNTAIN2_NOISE_WEIGHT == 1
+    # ==== GENERAL ==== #
+    DEBUG_INFO: bool
+    MAX_FRAMERATE: int
+    USE_DEFAULT_CURSOR: bool
 
-MOUNTAIN_RANGE_NOISE_WIDTH_MODIF: float = 0.8  # lower is wider ranges
-MOUNTAIN_MASK_SIZE_MODIF: float = 0.51  # higher is larger mask
-MOUNTAIN_MASK_STRENGTH_MODIF: float = 2.4  # higher is stronger mask
+    SCREEN_WIDTH: int
+    SCREEN_HEIGHT: int
 
-HILL0_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(8)
-HILL0_NOISE_WEIGHT: float = 0.5
-HILL1_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE.scalar_floordiv(2)
-HILL1_NOISE_WEIGHT: float = 0.4
-HILL2_NOISE_FREQUENCY: V2[int] = HEX_INIT_STORE_SIZE
-HILL2_NOISE_WEIGHT: float = 0.1
-assert HILL0_NOISE_WEIGHT + HILL1_NOISE_WEIGHT + HILL2_NOISE_WEIGHT == 1
+    @staticmethod
+    def read_general_config() -> None:
+        config: ConfigParser = ConfigParser()
+        config.read(Path(__file__).parent / "../config/general.cfg")
 
-HILL_MASK_SIZE_MODIF: float = 0.51  # higher is larger mask
-HILL_MASK_STRENGTH_MODIF: float = 2.4  # higher is stronger mask
+        general: SectionProxy = config["general"]
+        Cfg.DEBUG_INFO = general.getboolean("DEBUG_INFO")
+        Cfg.MAX_FRAMERATE = general.getint("MAX_FRAMERATE")
+        Cfg.USE_DEFAULT_CURSOR = general.getboolean("USE_DEFAULT_CURSOR")
 
-SHADING_MULT: float = 0.88
+        screen: SectionProxy = config["screen"]
+        Cfg.SCREEN_WIDTH = screen.getint("SCREEN_WIDTH")
+        Cfg.SCREEN_HEIGHT = screen.getint("SCREEN_HEIGHT")
+
+    # ==== HEX ==== #
+    HEX_INIT_SPRITE_SIZE: int
+    HEX_INIT_CHUNK_SIZE: int
+    HEX_INIT_CHUNK_OVERFLOW: int
+    HEX_MIN_CHUNK_SIZE: int
+    HEX_MAX_CHUNK_SIZE: int
+    HEX_INIT_STORE_SIZE: V2[int]  # TODO
+    HEX_ORIENTATION: HexOrientation  # TODO
+    HEX_NOF_HEXES: V2[int]
+
+    DRAG_MOVE_FACTOR: float
+    HEX_MIN_SIZE: int
+    HEX_MAX_SIZE: int
+    ZOOM_STEP_FACTOR: float
+    ZOOM_MOVE_FACTOR: float
+    CHUNKS_PER_FRAME: int
+
+    @staticmethod
+    def read_hex_config() -> None:
+        config: ConfigParser = ConfigParser()
+        config.read(Path(__file__).parent / "../config/hex.cfg")
+
+        model: SectionProxy = config["model"]
+        Cfg.HEX_INIT_SPRITE_SIZE = model.getint("HEX_INIT_SPRITE_SIZE")
+        Cfg.HEX_INIT_CHUNK_SIZE = model.getint("HEX_INIT_CHUNK_SIZE")
+        Cfg.HEX_INIT_CHUNK_OVERFLOW = model.getint("HEX_INIT_CHUNK_OVERFLOW")
+        Cfg.HEX_MIN_CHUNK_SIZE = model.getint("HEX_MIN_CHUNK_SIZE")
+        Cfg.HEX_MAX_CHUNK_SIZE = model.getint("HEX_MAX_CHUNK_SIZE")
+        Cfg.HEX_INIT_STORE_SIZE = V2(128, 80)
+        Cfg.HEX_ORIENTATION = HexOrientation.POINTY
+        Cfg.HEX_NOF_HEXES = V2(Cfg.HEX_INIT_CHUNK_SIZE, Cfg.HEX_INIT_CHUNK_SIZE) * Cfg.HEX_INIT_STORE_SIZE
+
+        view: SectionProxy = config["view"]
+        Cfg.DRAG_MOVE_FACTOR = view.getfloat("DRAG_MOVE_FACTOR")
+        Cfg.HEX_MIN_SIZE = view.getint("HEX_MIN_SIZE")
+        Cfg.HEX_MAX_SIZE = Cfg.HEX_INIT_SPRITE_SIZE
+        Cfg.ZOOM_STEP_FACTOR = view.getfloat("ZOOM_STEP_FACTOR")
+        Cfg.ZOOM_MOVE_FACTOR = view.getfloat("ZOOM_MOVE_FACTOR")
+        Cfg.CHUNKS_PER_FRAME = view.getint("CHUNKS_PER_FRAME")
+
+    # ==== HEIGHTMAP ==== #
+    CONTINENT_NOISE_WEIGHT: float
+    TERRAIN0_NOISE_WEIGHT: float
+    TERRAIN1_NOISE_WEIGHT: float
+    TERRAIN2_NOISE_WEIGHT: float
+    CONTINENT_NOISE_FREQUENCY: V2[int]  # TODO
+    TERRAIN0_NOISE_FREQUENCY: V2[int]  # TODO
+    TERRAIN1_NOISE_FREQUENCY: V2[int]  # TODO
+    TERRAIN2_NOISE_FREQUENCY: V2[int]  # TODO
+    CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION: float                   # lower is higher resolution
+    CONTINENT_NOISE_SIZE_MODIF: float                                   # higher is larger continents
+    CONTINENT_MAX_HEIGHT_DIV: float                                     # higher is higher continents
+
+    MOUNTAIN0_NOISE_WEIGHT: float
+    MOUNTAIN1_NOISE_WEIGHT: float
+    MOUNTAIN2_NOISE_WEIGHT: float
+    MOUNTAIN_RANGE_NOISE_FREQUENCY: V2[int]  # TODO
+    MOUNTAIN0_NOISE_FREQUENCY: V2[int]  # TODO
+    MOUNTAIN1_NOISE_FREQUENCY: V2[int]  # TODO
+    MOUNTAIN2_NOISE_FREQUENCY: V2[int]  # TODO
+    MOUNTAIN_RANGE_NOISE_WIDTH_MODIF: float                             # lower is wider ranges
+    MOUNTAIN_MASK_SIZE_MODIF: float                                     # higher is larger mask
+    MOUNTAIN_MASK_STRENGTH_MODIF: float                                 # higher is stronger mask
+
+    HILL0_NOISE_WEIGHT: float
+    HILL1_NOISE_WEIGHT: float
+    HILL2_NOISE_WEIGHT: float
+    HILL0_NOISE_FREQUENCY: V2[int]  # TODO
+    HILL1_NOISE_FREQUENCY: V2[int]  # TODO 
+    HILL2_NOISE_FREQUENCY: V2[int]  # TODO
+    HILL_MASK_SIZE_MODIF: float                                         # higher is larger mask
+    HILL_MASK_STRENGTH_MODIF: float                                     # higher is stronger mask
+
+    TERRAIN_LAYER_SHOWN: TerrainLayerShown
+
+    SHADING_MULT: float
+
+    @staticmethod
+    def read_terrain_config() -> None:
+        config: ConfigParser = ConfigParser()
+        config.read(Path(__file__).parent / "../config/terrain.cfg")
+
+        continents: SectionProxy = config["heightmap.continents"]
+        Cfg.CONTINENT_NOISE_WEIGHT = continents.getfloat("CONTINENT_NOISE_WEIGHT")
+        Cfg.TERRAIN0_NOISE_WEIGHT = continents.getfloat("TERRAIN0_NOISE_WEIGHT")
+        Cfg.TERRAIN1_NOISE_WEIGHT = continents.getfloat("TERRAIN1_NOISE_WEIGHT")
+        Cfg.TERRAIN2_NOISE_WEIGHT = continents.getfloat("TERRAIN2_NOISE_WEIGHT")
+        assert isclose(Cfg.CONTINENT_NOISE_WEIGHT + Cfg.TERRAIN0_NOISE_WEIGHT + Cfg.TERRAIN1_NOISE_WEIGHT + Cfg.TERRAIN2_NOISE_WEIGHT, 1.0)
+        Cfg.CONTINENT_NOISE_FREQUENCY = V2(4, 2)
+        Cfg.TERRAIN0_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(8)
+        Cfg.TERRAIN1_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(4)
+        Cfg.TERRAIN2_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(2)
+        Cfg.CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION = continents.getfloat("CONTINENT_NOISE_PEAK_FLATTENING_RESOLUTION")
+        Cfg.CONTINENT_NOISE_SIZE_MODIF = continents.getfloat("CONTINENT_NOISE_SIZE_MODIF")
+        Cfg.CONTINENT_MAX_HEIGHT_DIV = continents.getfloat("CONTINENT_MAX_HEIGHT_DIV")
+
+        mountains: SectionProxy = config["heightmap.mountains"]
+        Cfg.MOUNTAIN0_NOISE_WEIGHT = mountains.getfloat("MOUNTAIN0_NOISE_WEIGHT")
+        Cfg.MOUNTAIN1_NOISE_WEIGHT = mountains.getfloat("MOUNTAIN1_NOISE_WEIGHT")
+        Cfg.MOUNTAIN2_NOISE_WEIGHT = mountains.getfloat("MOUNTAIN2_NOISE_WEIGHT")
+        assert isclose(Cfg.MOUNTAIN0_NOISE_WEIGHT + Cfg.MOUNTAIN1_NOISE_WEIGHT + Cfg.MOUNTAIN2_NOISE_WEIGHT, 1.0)
+        Cfg.MOUNTAIN_RANGE_NOISE_FREQUENCY = V2(8, 4)
+        Cfg.MOUNTAIN0_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(8)
+        Cfg.MOUNTAIN1_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(4)
+        Cfg.MOUNTAIN2_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(2)
+        Cfg.MOUNTAIN_RANGE_NOISE_WIDTH_MODIF = mountains.getfloat("MOUNTAIN_RANGE_NOISE_WIDTH_MODIF")
+        Cfg.MOUNTAIN_MASK_SIZE_MODIF = mountains.getfloat("MOUNTAIN_MASK_SIZE_MODIF")
+        Cfg.MOUNTAIN_MASK_STRENGTH_MODIF = mountains.getfloat("MOUNTAIN_MASK_STRENGTH_MODIF")
+
+        hills: SectionProxy = config["heightmap.hills"]
+        Cfg.HILL0_NOISE_WEIGHT = hills.getfloat("HILL0_NOISE_WEIGHT")
+        Cfg.HILL1_NOISE_WEIGHT = hills.getfloat("HILL1_NOISE_WEIGHT")
+        Cfg.HILL2_NOISE_WEIGHT = hills.getfloat("HILL2_NOISE_WEIGHT")
+        assert isclose(Cfg.HILL0_NOISE_WEIGHT + Cfg.HILL1_NOISE_WEIGHT + Cfg.HILL2_NOISE_WEIGHT, 1.0)
+        Cfg.HILL0_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(8)
+        Cfg.HILL1_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(2)
+        Cfg.HILL2_NOISE_FREQUENCY = Cfg.HEX_INIT_STORE_SIZE.scalar_floordiv(1)
+        Cfg.HILL_MASK_SIZE_MODIF = hills.getfloat("HILL_MASK_SIZE_MODIF")
+        Cfg.HILL_MASK_STRENGTH_MODIF = hills.getfloat("HILL_MASK_STRENGTH_MODIF")
+
+        terrain: SectionProxy = config["heightmap.terrain"]
+        Cfg.TERRAIN_LAYER_SHOWN = TerrainLayerShown(terrain.getint("TERRAIN_LAYER_SHOWN"))
+
+        colours: SectionProxy = config["colours"]
+        Cfg.SHADING_MULT = colours.getfloat("SHADING_MULT")
