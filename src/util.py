@@ -2,8 +2,6 @@ from __future__ import annotations
 import numpy as np
 from typing import Protocol, TypeVar, Generic, Any
 
-from nptyping import NDArray
-
 
 LMB: int = 0
 MMB: int = 1
@@ -11,8 +9,9 @@ RMB: int = 2
 MMB_UP: int = 4
 MMB_DOWN: int = 5
 
+FArray = np.ndarray[float, Any]
 
-def normalise(array: NDArray[float, Any]) -> NDArray[float, Any]:
+def normalise(array: FArray) -> FArray:
     array = (array - np.min(array)) / (np.max(array) - np.min(array))
     return array
 

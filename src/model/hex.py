@@ -6,7 +6,7 @@ import pygame as pg
 import pynkie as pk
 import numpy as np
 
-from math import ceil, floor, sqrt, cos, sin, pi
+from math import ceil, floor, isclose, sqrt, cos, sin, pi
 from util import V2, V3, clip, even
 from config import Cfg, HexOrientation
 from view.loading import display_message
@@ -283,10 +283,12 @@ class Hex(pk.model.Model):
         gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(Ax.ax_to_of(self._ax)),
                                  -gradient_2std.y(), gradient_2std.y())
         
-        mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - Cfg.SHADING_MULT))
-        shading_mult *= 1 / mult_x
-        mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - Cfg.SHADING_MULT))
-        shading_mult *= 1 / mult_y
+        if not isclose(gradient_2std.x(), 0.0):
+            mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - Cfg.SHADING_MULT))
+            shading_mult *= 1 / mult_x
+        if not isclose(gradient_2std.y(), 0.0):
+            mult_y: float = 1.0 - (gradient_y / gradient_2std.y() * (1.0 - Cfg.SHADING_MULT))
+            shading_mult *= 1 / mult_y
 
         return shading_mult
     

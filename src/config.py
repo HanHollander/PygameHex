@@ -18,6 +18,7 @@ class TerrainLayerShown(Enum):
     CONTINENTS_MOUNTAINS = 5
     CONTINENTS_HILLS = 6
     MOUNTAINS_HILLS = 7
+    CONTINENT_MASK = 8
 
 class Cfg:
 
