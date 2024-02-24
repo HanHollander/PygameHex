@@ -125,7 +125,7 @@ class V2(Generic[T]):
 
     def __int__(self) -> V2[int]:
         return V2(int(self._t[0]), int(self._t[1]))
-    def to_int(self) -> V2[int]:
+    def to_int(self) -> V2[int]: # type: ignore
         return self.__int__()
     
     def __float__(self) -> V2[float]:

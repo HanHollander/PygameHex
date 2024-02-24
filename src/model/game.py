@@ -68,4 +68,6 @@ class Game(pk.model.Model):
                 [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), 
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft(),
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].bottomright()]
-            pk.debug.debug["Hex attributes"] = [hex.attr().height, hex.attr().terrain, hex.element().colour]
+            pk.debug.debug["Hex terrain/colour"] = [hex.attr().terrain_type, hex.element().colour]
+            pk.debug.debug["Hex altitude"] = [hex.attr().altitude, hex.attr().terrain_altitude]
+            pk.debug.debug["Hex temperature"] = [hex.attr().temperature, hex.attr().terrain_temperature]

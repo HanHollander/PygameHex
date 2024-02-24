@@ -1,7 +1,7 @@
 from threading import Thread
 import time
 from typing import Any, Callable, TYPE_CHECKING, Iterable, Mapping
-from model.terrain import TerrainHeightmap, TerrainColourMapping, TerrainType
+from model.terrain import TerrainAltitude, TerrainAltitudeMapping, TerrainHeightmap, TerrainColourMapping, TerrainHumidity, TerrainMapping, TerrainTemperature, TerrainTemperatureMapping, TerrainTemperaturemap, TerrainType
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -189,20 +189,29 @@ class HexSpriteStore:
 class HexAttr():
 
     # static class variables
+    terrain_mapping: TerrainMapping
+    altitude_mapping: TerrainAltitudeMapping
+    temperature_mapping: TerrainTemperatureMapping
+    colour_mapping: TerrainColourMapping
     heightmap: TerrainHeightmap
-    colours: TerrainColourMapping
+    temperaturemap: TerrainTemperaturemap
 
     @staticmethod
-    def init_heightmap() -> None:
+    def init() -> None:
+        HexAttr.terrain_mapping = TerrainMapping()
+        HexAttr.altitude_mapping = TerrainAltitudeMapping()
+        HexAttr.temperature_mapping = TerrainTemperatureMapping()
+        HexAttr.colour_mapping = TerrainColourMapping()
         HexAttr.heightmap = TerrainHeightmap()
-
-    @staticmethod
-    def init_colours() -> None:
-        HexAttr.colours = TerrainColourMapping()
+        HexAttr.temperaturemap = TerrainTemperaturemap()
 
     def __init__(self, hex: "Hex") -> None:
-        self.height: float = HexAttr.heightmap.get_height_from_of(Ax.ax_to_of(hex.ax()))
-        self.terrain: TerrainType = HexAttr.heightmap.get_terrain_type(self.height)
+        of: V2[int] = Ax.ax_to_of(hex.ax());
+        self.altitude: float = HexAttr.heightmap.get_altitude_from_of(of)
+        self.terrain_altitude: TerrainAltitude = HexAttr.altitude_mapping.get_terrain_altitude(self.altitude)
+        self.temperature: float = HexAttr.temperaturemap.get_temperature_from_of(of)
+        self.terrain_temperature: TerrainTemperature = HexAttr.temperature_mapping.get_terrain_temperature(self.temperature)
+        self.terrain_type: TerrainType = HexAttr.terrain_mapping.get_terrain_type(TerrainHumidity.AVERAGE, self.terrain_altitude, self.terrain_temperature)
 
     
 class Hex(pk.model.Model):
@@ -243,7 +252,7 @@ class Hex(pk.model.Model):
 
         px: V2[int] = Ax.ax_to_px(self._ax)
         pos: tuple[int, int] = (px.x() - round(Hex.dim.x() / 2), px.y() - round(Hex.dim.y() / 2));
-        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain]
+        img: pg.Surface = HexSpriteStore.scaled_store[self._attr.terrain_type]
         colour: V3[int] = self.determine_colour()
         self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
 
@@ -266,15 +275,18 @@ class Hex(pk.model.Model):
         self._element.colour = colour
     
     def get_terrain_colour(self) -> V3[int]:
-        c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
-        h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
-        height_mult: float = (self._attr.height - h1) / abs(h2 - h1)
-        colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
-        return V3(c1[0], c1[1], c1[2]) + colour_diff
+        # c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
+        # h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
+        # height_mult: float = (self._attr.height - h1) / abs(h2 - h1)
+        # colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
+        # return V3(c1[0], c1[1], c1[2]) + colour_diff
+        h: float = self._attr.altitude
+        c1, c2 = HexAttr.colour_mapping.get_colour(self._attr.terrain_type)
+        return V3(c1[0], c1[1], c1[2]).to_float().scalar_mul(h).to_int()
     
     def get_shading_mult(self) -> float:
         shading_mult = 1.0
-        if self._attr.terrain in [TerrainType.DEEP_OCEAN, TerrainType.SHALLOW_OCEAN]:
+        if self._attr.terrain_type in [TerrainType.DEEP_WATER, TerrainType.SHALLOW_WATER]:
             return shading_mult
         
         gradient_2std: V2[float] = HexAttr.heightmap.get_gradient_std()
@@ -303,7 +315,7 @@ class Hex(pk.model.Model):
         self._element.rect.size = Hex.dim.get()
 
     def update_element_image(self) -> None:
-        self._element.image = HexSpriteStore.scaled_store[self._attr.terrain]
+        self._element.image = HexSpriteStore.scaled_store[self._attr.terrain_type]
         pass
 
     def __str__(self) -> str:
@@ -601,8 +613,7 @@ class HexController(pk.model.Model):
         Hex.orientation = Cfg.HEX_ORIENTATION
         Hex.set_size(Cfg.HEX_MAX_SIZE)
         display_message(display, "    > initialising hex attributes")
-        HexAttr.init_heightmap()
-        HexAttr.init_colours()
+        HexAttr.init()
         display_message(display, "    > initialising sprite store")
         HexSpriteStore.init_store()
         display_message(display, "    > initialising hex store")
