@@ -147,25 +147,42 @@ class TerrainAltitudeMapping:
     
 
 class TerrainHumidityMapping:
-    pass
+    def __init__(self) -> None:
+        H_ARID: V2[float] = V2(Cfg.H_ARID, 999.0)
+        H_AVERAGE: V2[float] = V2(Cfg.H_AVERAGE, H_ARID[0])
+        H_HUMID: V2[float] = V2(Cfg.H_HUMID, H_AVERAGE[0])
+
+        self._mapping: dict[TerrainHumidity, V2[float]] = {
+            TerrainHumidity.ARID: H_ARID, 
+            TerrainHumidity.AVERAGE: H_AVERAGE, 
+            TerrainHumidity.HUMID: H_HUMID
+        }
+
+    def get_terrain_humidity(self, humidity: float) -> TerrainHumidity:
+        for kv in self._mapping.items():
+            if humidity >= kv[1][0] and humidity < kv[1][1]:
+                return kv[0]
+        return TerrainHumidity.AVERAGE
+    
+    def get_humidity(self, terrain_humidity: TerrainHumidity) -> V2[float]:
+        return self._mapping[terrain_humidity]  
 
 
 class TerrainTemperatureMapping:
     
     def __init__(self) -> None:
-        A_HIGH: V2[float] = V2(Cfg.A_HIGH, 999.0)
-        A_MEDIUM: V2[float] = V2(Cfg.A_MEDIUM, A_HIGH[0])
-        A_LOW: V2[float] = V2(Cfg.A_LOW, A_MEDIUM[0])
-        A_SHALLOW_WATER: V2[float] = V2(Cfg.A_SHALLOW_WATER, A_LOW[0])
-        A_DEEP_WATER: V2[float] = V2(Cfg.A_DEEP_WATER, A_SHALLOW_WATER[0])
-        A_VOID: V2[float] = V2(-999.0, A_DEEP_WATER[0])
+        T_FREEZING: V2[float] = V2(Cfg.T_FREEZING, 999.0)
+        T_COLD: V2[float] = V2(Cfg.T_COLD, T_FREEZING[0])
+        T_AVERAGE: V2[float] = V2(Cfg.T_AVERAGE, T_COLD[0])
+        T_WARM: V2[float] = V2(Cfg.T_WARM, T_AVERAGE[0])
+        T_HOT: V2[float] = V2(Cfg.T_HOT, T_WARM[0])
 
         self._mapping: dict[TerrainTemperature, V2[float]] = {
-            TerrainTemperature.FREEZING: A_HIGH, 
-            TerrainTemperature.COLD: A_MEDIUM, 
-            TerrainTemperature.AVERAGE: A_LOW, 
-            TerrainTemperature.WARM: A_SHALLOW_WATER,
-            TerrainTemperature.HOT: A_DEEP_WATER
+            TerrainTemperature.FREEZING: T_FREEZING, 
+            TerrainTemperature.COLD: T_COLD, 
+            TerrainTemperature.AVERAGE: T_AVERAGE, 
+            TerrainTemperature.WARM: T_WARM,
+            TerrainTemperature.HOT: T_HOT
         }
 
     def get_terrain_temperature(self, temperature: float) -> TerrainTemperature:
@@ -180,36 +197,22 @@ class TerrainTemperatureMapping:
 
 class TerrainColourMapping:
 
-    def __init__(self) -> None:  # TODO magic
-        clr = pg.Color
-        C_ARCTIC: tuple[pg.Color, pg.Color] = (clr("#fffafa"), clr("#fffafa"))
-        C_TUNDRA: tuple[pg.Color, pg.Color] = (clr("#7f966f"), clr("#828873"))
-        C_STEPPE: tuple[pg.Color, pg.Color] = (clr("#8ea773"), clr("#b7bd86"))
-        C_GRASSLANDS: tuple[pg.Color, pg.Color] = (clr("#80a761"), clr("#97bd74"))
-        C_SAVANNA: tuple[pg.Color, pg.Color] = (clr("#a7b172"), clr("#d9dfa8"))
-        C_DESERT: tuple[pg.Color, pg.Color] = (clr("#eec875"), clr("#e6dfa8"))
-        C_BOREAL: tuple[pg.Color, pg.Color] = (clr("#1f3018"), clr("#17220d"))
-        C_TEMPERATE: tuple[pg.Color, pg.Color] = (clr("#235212"), clr("#36572a"))
-        C_MEDITERRANEAN: tuple[pg.Color, pg.Color] = (clr("#b0b984"), clr("#7e8b58"))
-        C_TROPIC: tuple[pg.Color, pg.Color] = (clr("#205c1e"), clr("#294e0f"))
-        C_SHALLOW_WATER: tuple[pg.Color, pg.Color] = (clr("#2e446d"), clr("#4c728b"))
-        C_DEEP_WATER: tuple[pg.Color, pg.Color] = (clr("#0f192c"), clr("#213150"))
-        C_VOID: tuple[pg.Color, pg.Color] = (clr("#000000"), clr("#000000"))
+    def __init__(self) -> None:
 
         self._mapping: dict[TerrainType, tuple[pg.Color, pg.Color]] = {
-            TerrainType.ARCTIC: C_ARCTIC,
-            TerrainType.TUNDRA: C_TUNDRA,
-            TerrainType.STEPPE: C_STEPPE,
-            TerrainType.GRASSLANDS: C_GRASSLANDS,
-            TerrainType.SAVANNA: C_SAVANNA,
-            TerrainType.DESERT: C_DESERT,
-            TerrainType.BOREAL: C_BOREAL,
-            TerrainType.TEMPERATE: C_TEMPERATE,
-            TerrainType.MEDITERRANEAN: C_MEDITERRANEAN,
-            TerrainType.TROPIC: C_TROPIC,
-            TerrainType.SHALLOW_WATER: C_SHALLOW_WATER,
-            TerrainType.DEEP_WATER: C_DEEP_WATER,
-            TerrainType.VOID: C_VOID
+            TerrainType.ARCTIC: Cfg.C_ARCTIC,
+            TerrainType.TUNDRA: Cfg.C_TUNDRA,
+            TerrainType.STEPPE: Cfg.C_STEPPE,
+            TerrainType.GRASSLANDS: Cfg.C_GRASSLANDS,
+            TerrainType.SAVANNA: Cfg.C_SAVANNA,
+            TerrainType.DESERT: Cfg.C_DESERT,
+            TerrainType.BOREAL: Cfg.C_BOREAL,
+            TerrainType.TEMPERATE: Cfg.C_TEMPERATE,
+            TerrainType.MEDITERRANEAN: Cfg.C_MEDITERRANEAN,
+            TerrainType.TROPIC: Cfg.C_TROPIC,
+            TerrainType.SHALLOW_WATER: Cfg.C_SHALLOW_WATER,
+            TerrainType.DEEP_WATER: Cfg.C_DEEP_WATER,
+            TerrainType.VOID: Cfg.C_VOID
         }
 
     def get_colour(self, type: TerrainType) -> tuple[pg.Color, pg.Color]:
@@ -362,6 +365,10 @@ class TerrainHeightmap:
         self._gradient_x_std: float = float(np.std(self._gradient_x))
         self._gradient_y_std: float = float(np.std(self._gradient_y))
 
+        self.continents = continents
+        self.mountains = mountains
+        self.hills = hills
+
     def get_altitude_from_of(self, of: V2[int]) -> float:
         return  self._map[of.x()][of.y()]
     
@@ -373,23 +380,57 @@ class TerrainHeightmap:
         return V2(2.0 * self._gradient_x_std, 2.0 * self._gradient_y_std)
     
 
+class TerrainHumiditymap:
+
+    def __init__(self, continents: FArray) -> None:
+
+        def ns_mask() -> FArray:  # TODO magic
+            mask: FArray = np.ones(noise_dim.get())
+            mask[:, :int(noise_dim.y() * Cfg.H_0)] = Cfg.H_HUMID
+            mask[:, :int(noise_dim.y() * Cfg.H_1)] = Cfg.H_ARID
+            mask[:, :int(noise_dim.y() * Cfg.H_2)] = Cfg.H_AVERAGE
+            mask[:, :int(noise_dim.y() * Cfg.H_3)] = Cfg.H_HUMID
+            mask[:, :int(noise_dim.y() * Cfg.H_4)] = Cfg.H_AVERAGE
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.H_0):] = Cfg.H_HUMID
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.H_1):] = Cfg.H_ARID
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.H_2):] = Cfg.H_AVERAGE
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.H_3):] = Cfg.H_HUMID
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.H_4):] = Cfg.H_AVERAGE
+            mask = gaussian_filter(mask, noise_dim.scalar_truediv(Cfg.NS_MASK_GAUSSIAN_FILTER_SIZE).to_int().get()) # type: ignore
+            assert isinstance(mask, NDArray)
+            terrain0_noise: FArray = normal_noise(Cfg.TERRAIN0_NOISE_FREQUENCY.get())
+            terrain1_noise: FArray = normal_noise(Cfg.TERRAIN1_NOISE_FREQUENCY.get())
+            terrain2_noise: FArray = normal_noise(Cfg.TERRAIN2_NOISE_FREQUENCY.get())
+            mask += \
+                (0.25 * terrain0_noise) + \
+                (Cfg.TERRAIN1_NOISE_WEIGHT * terrain1_noise) + \
+                (Cfg.TERRAIN2_NOISE_WEIGHT * terrain2_noise)
+            mask += Cfg.H_MASK_NOISE_WEIGHT * continents
+            mask = normalise(mask)
+            return mask
+
+        self._map: FArray = ns_mask()
+        
+    def get_humidity_from_of(self, of: V2[int]) -> float:
+        return  self._map[of.x()][of.y()]
+
 
 class TerrainTemperaturemap:
 
     def __init__(self) -> None:
 
-        def ns_mask() -> FArray:
+        def ns_mask() -> FArray:  # TODO magic
             mask: FArray = np.ones(noise_dim.get())
-            mask[:, :int(noise_dim.y() // (10 / 5))] = Cfg.T_HOT
-            mask[:, :int(noise_dim.y() // (10 / 4.5))] = Cfg.T_WARM
-            mask[:, :int(noise_dim.y() // (10 / 3.5))] = Cfg.T_AVERAGE
-            mask[:, :int(noise_dim.y() // (10 / 1.5))] = Cfg.T_COLD
-            mask[:, :int(noise_dim.y() // (10 / 0.5))] = Cfg.T_FREEZING
-            mask[:, int(noise_dim.y() - noise_dim.y() // (10 / 5)):] = Cfg.T_HOT
-            mask[:, int(noise_dim.y() - noise_dim.y() // (10 / 4.5)):] = Cfg.T_WARM
-            mask[:, int(noise_dim.y() - noise_dim.y() // (10 / 3.5)):] = Cfg.T_AVERAGE
-            mask[:, int(noise_dim.y() - noise_dim.y() // (10 / 1.5)):] = Cfg.T_COLD
-            mask[:, int(noise_dim.y() - noise_dim.y() // (10 / 0.5)):] = Cfg.T_FREEZING
+            mask[:, :int(noise_dim.y() * Cfg.T_0)] = Cfg.T_HOT
+            mask[:, :int(noise_dim.y() * Cfg.T_1)] = Cfg.T_WARM
+            mask[:, :int(noise_dim.y() * Cfg.T_2)] = Cfg.T_AVERAGE
+            mask[:, :int(noise_dim.y() * Cfg.T_3)] = Cfg.T_COLD
+            mask[:, :int(noise_dim.y() * Cfg.T_4)] = Cfg.T_FREEZING
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.T_0):] = Cfg.T_HOT
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.T_1):] = Cfg.T_WARM
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.T_2):] = Cfg.T_AVERAGE
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.T_3):] = Cfg.T_COLD
+            mask[:, int(noise_dim.y() - noise_dim.y() * Cfg.T_4):] = Cfg.T_FREEZING
             mask = gaussian_filter(mask, noise_dim.scalar_truediv(Cfg.NS_MASK_GAUSSIAN_FILTER_SIZE).to_int().get()) # type: ignore
             assert isinstance(mask, NDArray)
             terrain0_noise: FArray = normal_noise(Cfg.TERRAIN0_NOISE_FREQUENCY.get())

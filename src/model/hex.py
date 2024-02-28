@@ -1,7 +1,7 @@
 from threading import Thread
 import time
 from typing import Any, Callable, TYPE_CHECKING, Iterable, Mapping
-from model.terrain import TerrainAltitude, TerrainAltitudeMapping, TerrainHeightmap, TerrainColourMapping, TerrainHumidity, TerrainMapping, TerrainTemperature, TerrainTemperatureMapping, TerrainTemperaturemap, TerrainType
+from model.terrain import TerrainAltitude, TerrainAltitudeMapping, TerrainHeightmap, TerrainColourMapping, TerrainHumidity, TerrainHumidityMapping, TerrainHumiditymap, TerrainMapping, TerrainTemperature, TerrainTemperatureMapping, TerrainTemperaturemap, TerrainType
 import pygame as pg
 import pynkie as pk
 import numpy as np
@@ -191,27 +191,33 @@ class HexAttr():
     # static class variables
     terrain_mapping: TerrainMapping
     altitude_mapping: TerrainAltitudeMapping
+    humidity_mapping: TerrainHumidityMapping
     temperature_mapping: TerrainTemperatureMapping
     colour_mapping: TerrainColourMapping
     heightmap: TerrainHeightmap
+    humiditymap: TerrainHumiditymap
     temperaturemap: TerrainTemperaturemap
 
     @staticmethod
     def init() -> None:
         HexAttr.terrain_mapping = TerrainMapping()
         HexAttr.altitude_mapping = TerrainAltitudeMapping()
+        HexAttr.humidity_mapping = TerrainHumidityMapping()
         HexAttr.temperature_mapping = TerrainTemperatureMapping()
         HexAttr.colour_mapping = TerrainColourMapping()
         HexAttr.heightmap = TerrainHeightmap()
+        HexAttr.humiditymap = TerrainHumiditymap(HexAttr.heightmap.continents)
         HexAttr.temperaturemap = TerrainTemperaturemap()
 
     def __init__(self, hex: "Hex") -> None:
         of: V2[int] = Ax.ax_to_of(hex.ax());
         self.altitude: float = HexAttr.heightmap.get_altitude_from_of(of)
         self.terrain_altitude: TerrainAltitude = HexAttr.altitude_mapping.get_terrain_altitude(self.altitude)
+        self.humidity: float = HexAttr.humiditymap.get_humidity_from_of(of)
+        self.terrain_humidity: TerrainHumidity = HexAttr.humidity_mapping.get_terrain_humidity(self.humidity)
         self.temperature: float = HexAttr.temperaturemap.get_temperature_from_of(of)
         self.terrain_temperature: TerrainTemperature = HexAttr.temperature_mapping.get_terrain_temperature(self.temperature)
-        self.terrain_type: TerrainType = HexAttr.terrain_mapping.get_terrain_type(TerrainHumidity.AVERAGE, self.terrain_altitude, self.terrain_temperature)
+        self.terrain_type: TerrainType = HexAttr.terrain_mapping.get_terrain_type(self.terrain_humidity, self.terrain_altitude, self.terrain_temperature)
 
     
 class Hex(pk.model.Model):
@@ -275,14 +281,12 @@ class Hex(pk.model.Model):
         self._element.colour = colour
     
     def get_terrain_colour(self) -> V3[int]:
-        # c1, c2 = HexAttr.colours.get_colour(self._attr.terrain)
-        # h1, h2 = HexAttr.heightmap.get_height(self._attr.terrain).get()
-        # height_mult: float = (self._attr.height - h1) / abs(h2 - h1)
-        # colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
-        # return V3(c1[0], c1[1], c1[2]) + colour_diff
         h: float = self._attr.altitude
         c1, c2 = HexAttr.colour_mapping.get_colour(self._attr.terrain_type)
-        return V3(c1[0], c1[1], c1[2]).to_float().scalar_mul(h).to_int()
+        h1, h2 = HexAttr.altitude_mapping.get_altitude(self._attr.terrain_altitude).get()
+        height_mult: float = (h - h1) / abs(h2 - h1)
+        colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
+        return V3(c1[0], c1[1], c1[2]) + colour_diff
     
     def get_shading_mult(self) -> float:
         shading_mult = 1.0
@@ -686,7 +690,7 @@ class HexController(pk.model.Model):
     
     def reset_map(self) -> None:
         Cfg.read_terrain_config()
-        HexAttr.heightmap = TerrainHeightmap()
+        HexAttr.init()
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
