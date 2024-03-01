@@ -20,6 +20,14 @@ class TerrainLayerShown(Enum):
     CONTINENTS_HILLS = 6
     MOUNTAINS_HILLS = 7
     CONTINENT_MASK = 8
+    MOUNTAIN_RANGE_NOISE = 9
+
+class ColourScheme(Enum):
+    TERRAIN = 0
+    HEIGHTMAP = 1
+    HUMIDITYMAP = 2
+    TEMPERATUREMAP = 3
+
 
 def v2_converter(s: str) -> V2[int]:
     t = tuple(int(k.strip()) for k in s[1:-1].split(','))
@@ -159,7 +167,10 @@ class Cfg:
     H_2: float
     H_3: float
     H_4: float
-    H_MASK_NOISE_WEIGHT: float
+    H_CONTINENT_MASK_NOISE_WEIGHT: float
+    H_CONTINENT_MASK_THRESHOLD: float
+    H_MOUNTAIN_MASK_NOISE_WEIGHT: float
+    H_MOUNTAIN_MASK_THRESHOLD: float
 
     T_FREEZING: float
     T_COLD: float
@@ -171,12 +182,14 @@ class Cfg:
     T_2: float
     T_3: float
     T_4: float
+    T_CONTINENT_MASK_NOISE_WEIGHT: float
+
+    COLOUR_SCHEME: ColourScheme
 
     SHADING_MULT: float
     C_ARCTIC: tuple[pg.Color, pg.Color]
     C_TUNDRA: tuple[pg.Color, pg.Color]
     C_STEPPE: tuple[pg.Color, pg.Color]
-    C_GRASSLANDS: tuple[pg.Color, pg.Color]
     C_SAVANNA: tuple[pg.Color, pg.Color]
     C_DESERT: tuple[pg.Color, pg.Color]
     C_BOREAL: tuple[pg.Color, pg.Color]
@@ -186,6 +199,19 @@ class Cfg:
     C_SHALLOW_WATER: tuple[pg.Color, pg.Color]
     C_DEEP_WATER: tuple[pg.Color, pg.Color]
     C_VOID: tuple[pg.Color, pg.Color]
+
+    C_LOW: pg.Color
+    C_HIGH: pg.Color
+
+    H_H_LOW: int
+    H_H_HIGH: int
+    H_S: float
+    H_L: float
+
+    T_H_LOW: int
+    T_H_HIGH: int
+    T_S: float
+    T_L: float
 
     @staticmethod
     def read_terrain_config() -> None:
@@ -254,11 +280,11 @@ class Cfg:
         Cfg.NS_MASK_NOISE_WEIGHT = terrain.getfloat("NS_MASK_NOISE_WEIGTH")
 
         altitude: SectionProxy = config["altitude"]
-        Cfg.A_HIGH = altitude.getfloat("H_HIGH")
-        Cfg.A_MEDIUM = altitude.getfloat("H_MEDIUM")
-        Cfg.A_LOW = altitude.getfloat("H_LOW")
-        Cfg.A_SHALLOW_WATER = altitude.getfloat("H_SHALLOW_WATER")
-        Cfg.A_DEEP_WATER = altitude.getfloat("H_DEEP_WATER")
+        Cfg.A_HIGH = altitude.getfloat("A_HIGH")
+        Cfg.A_MEDIUM = altitude.getfloat("A_MEDIUM")
+        Cfg.A_LOW = altitude.getfloat("A_LOW")
+        Cfg.A_SHALLOW_WATER = altitude.getfloat("A_SHALLOW_WATER")
+        Cfg.A_DEEP_WATER = altitude.getfloat("A_DEEP_WATER")
 
         humidity: SectionProxy = config["humidity"]
         Cfg.H_ARID = humidity.getfloat("H_ARID")
@@ -269,7 +295,10 @@ class Cfg:
         Cfg.H_2 = humidity.getfloat("H_2")
         Cfg.H_3 = humidity.getfloat("H_3")
         Cfg.H_4 = humidity.getfloat("H_4")
-        Cfg.H_MASK_NOISE_WEIGHT = humidity.getfloat("H_MASK_NOISE_WEIGHT")
+        Cfg.H_CONTINENT_MASK_NOISE_WEIGHT = humidity.getfloat("H_CONTINENT_MASK_NOISE_WEIGHT")
+        Cfg.H_CONTINENT_MASK_THRESHOLD = humidity.getfloat("H_CONTINENT_MASK_THRESHOLD")
+        Cfg.H_MOUNTAIN_MASK_NOISE_WEIGHT = humidity.getfloat("H_MOUNTAIN_MASK_NOISE_WEIGHT")
+        Cfg.H_MOUNTAIN_MASK_THRESHOLD = humidity.getfloat("H_MOUNTAIN_MASK_THRESHOLD")
 
         temperature: SectionProxy = config["temperature"]
         Cfg.T_FREEZING = temperature.getfloat("T_FREEZING")
@@ -282,19 +311,38 @@ class Cfg:
         Cfg.T_2 = temperature.getfloat("T_2")
         Cfg.T_3 = temperature.getfloat("T_3")
         Cfg.T_4 = temperature.getfloat("T_4")
+        Cfg.T_CONTINENT_MASK_NOISE_WEIGHT = temperature.getfloat("T_CONTINENT_MASK_NOISE_WEIGHT")
 
         colours: SectionProxy = config["colours"]
-        Cfg.SHADING_MULT = colours.getfloat("SHADING_MULT")
-        Cfg.C_ARCTIC = colours.getclrtuple("C_ARCTIC")
-        Cfg.C_TUNDRA = colours.getclrtuple("C_TUNDRA")
-        Cfg.C_STEPPE = colours.getclrtuple("C_STEPPE")
-        Cfg.C_GRASSLANDS = colours.getclrtuple("C_GRASSLANDS")
-        Cfg.C_SAVANNA = colours.getclrtuple("C_SAVANNA")
-        Cfg.C_DESERT = colours.getclrtuple("C_DESERT")
-        Cfg.C_BOREAL = colours.getclrtuple("C_BOREAL")
-        Cfg.C_TEMPERATE = colours.getclrtuple("C_TEMPERATE")
-        Cfg.C_MEDITERRANEAN = colours.getclrtuple("C_MEDITERRANEAN")
-        Cfg.C_TROPIC = colours.getclrtuple("C_TROPIC")
-        Cfg.C_SHALLOW_WATER = colours.getclrtuple("C_SHALLOW_WATER")
-        Cfg.C_DEEP_WATER = colours.getclrtuple("C_DEEP_WATER")
-        Cfg.C_VOID = colours.getclrtuple("C_VOID")
+        Cfg.COLOUR_SCHEME = ColourScheme(colours.getint("COLOUR_SCHEME"))
+
+        terrainmap: SectionProxy = config["colours.terrainmap"]
+        Cfg.SHADING_MULT = terrainmap.getfloat("SHADING_MULT")
+        Cfg.C_ARCTIC = terrainmap.getclrtuple("C_ARCTIC")
+        Cfg.C_TUNDRA = terrainmap.getclrtuple("C_TUNDRA")
+        Cfg.C_STEPPE = terrainmap.getclrtuple("C_STEPPE")
+        Cfg.C_SAVANNA = terrainmap.getclrtuple("C_SAVANNA")
+        Cfg.C_DESERT = terrainmap.getclrtuple("C_DESERT")
+        Cfg.C_BOREAL = terrainmap.getclrtuple("C_BOREAL")
+        Cfg.C_TEMPERATE = terrainmap.getclrtuple("C_TEMPERATE")
+        Cfg.C_MEDITERRANEAN = terrainmap.getclrtuple("C_MEDITERRANEAN")
+        Cfg.C_TROPIC = terrainmap.getclrtuple("C_TROPIC")
+        Cfg.C_SHALLOW_WATER = terrainmap.getclrtuple("C_SHALLOW_WATER")
+        Cfg.C_DEEP_WATER = terrainmap.getclrtuple("C_DEEP_WATER")
+        Cfg.C_VOID = terrainmap.getclrtuple("C_VOID")
+
+        heightmap: SectionProxy = config["colours.heightmap"]
+        Cfg.C_LOW = pg.Color(heightmap.get("C_LOW"))
+        Cfg.C_HIGH = pg.Color(heightmap.get("C_HIGH"))
+
+        humiditymap: SectionProxy = config["colours.humiditymap"]
+        Cfg.H_H_LOW = humiditymap.getint("H_H_LOW")
+        Cfg.H_H_HIGH = humiditymap.getint("H_H_HIGH")
+        Cfg.H_S = humiditymap.getfloat("H_S")
+        Cfg.H_L = humiditymap.getfloat("H_L")
+
+        temperaturemap: SectionProxy = config["colours.temperaturemap"]
+        Cfg.T_H_LOW = temperaturemap.getint("T_H_LOW")
+        Cfg.T_H_HIGH = temperaturemap.getint("T_H_HIGH")
+        Cfg.T_S = temperaturemap.getfloat("T_S")
+        Cfg.T_L = temperaturemap.getfloat("T_L")

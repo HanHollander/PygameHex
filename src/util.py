@@ -1,6 +1,7 @@
 from __future__ import annotations
 import numpy as np
 from typing import Protocol, TypeVar, Generic, Any
+import colorsys
 
 
 LMB: int = 0
@@ -17,6 +18,22 @@ def normalise(array: FArray) -> FArray:
 
 def even(a: int) -> int:
     return a + (a % 2)
+
+
+
+def interpolate_v3(v1: V3[int], v2: V3[int], x: float) -> V3[int]:
+    r1: float = (1.0 - x) * v1[0] + x * v2[0]
+    r2: float = (1.0 - x) * v1[1] + x * v2[1]
+    r3: float = (1.0 - x) * v1[2] + x * v2[2]
+
+    return V3(r1, r2, r3).to_int()
+
+
+def bilinear_interpolate_v3(v1, v2, v3, v4, x, y):
+    i1 = interpolate_v3(v1, v2, x)
+    i2 = interpolate_v3(v3, v4, x)
+    return interpolate_v3(i1, i2, y)
+
 
 
 _T = TypeVar('_T')

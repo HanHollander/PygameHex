@@ -51,6 +51,8 @@ class Game(pk.model.Model):
             self.max_fps = 0
         if event.key == pg.K_r:
             self.hex_controller.reset_map()
+        if event.key == pg.K_c:
+            self.hex_controller.redraw_map()
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)

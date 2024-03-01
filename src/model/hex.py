@@ -1,3 +1,4 @@
+import colorsys
 from threading import Thread
 import time
 from typing import Any, Callable, TYPE_CHECKING, Iterable, Mapping
@@ -7,8 +8,8 @@ import pynkie as pk
 import numpy as np
 
 from math import ceil, floor, isclose, sqrt, cos, sin, pi
-from util import V2, V3, clip, even
-from config import Cfg, HexOrientation
+from util import V2, V3, bilinear_interpolate_v3, clip, even, interpolate_v3
+from config import Cfg, ColourScheme, HexOrientation
 from view.loading import display_message
 
 if TYPE_CHECKING:
@@ -206,8 +207,8 @@ class HexAttr():
         HexAttr.temperature_mapping = TerrainTemperatureMapping()
         HexAttr.colour_mapping = TerrainColourMapping()
         HexAttr.heightmap = TerrainHeightmap()
-        HexAttr.humiditymap = TerrainHumiditymap(HexAttr.heightmap.continents)
-        HexAttr.temperaturemap = TerrainTemperaturemap()
+        HexAttr.humiditymap = TerrainHumiditymap(HexAttr.heightmap.continents.copy(), HexAttr.heightmap.unmod_mountain_range_noise.copy())
+        HexAttr.temperaturemap = TerrainTemperaturemap(HexAttr.heightmap.heightmap.copy())
 
     def __init__(self, hex: "Hex") -> None:
         of: V2[int] = Ax.ax_to_of(hex.ax());
@@ -217,7 +218,7 @@ class HexAttr():
         self.terrain_humidity: TerrainHumidity = HexAttr.humidity_mapping.get_terrain_humidity(self.humidity)
         self.temperature: float = HexAttr.temperaturemap.get_temperature_from_of(of)
         self.terrain_temperature: TerrainTemperature = HexAttr.temperature_mapping.get_terrain_temperature(self.temperature)
-        self.terrain_type: TerrainType = HexAttr.terrain_mapping.get_terrain_type(self.terrain_humidity, self.terrain_altitude, self.terrain_temperature)
+        self.terrain_type: TerrainType = HexAttr.terrain_mapping.get_terrain_type(self.terrain_altitude, self.terrain_humidity, self.terrain_temperature)
 
     
 class Hex(pk.model.Model):
@@ -281,12 +282,83 @@ class Hex(pk.model.Model):
         self._element.colour = colour
     
     def get_terrain_colour(self) -> V3[int]:
-        h: float = self._attr.altitude
-        c1, c2 = HexAttr.colour_mapping.get_colour(self._attr.terrain_type)
-        h1, h2 = HexAttr.altitude_mapping.get_altitude(self._attr.terrain_altitude).get()
-        height_mult: float = (h - h1) / abs(h2 - h1)
-        colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
-        return V3(c1[0], c1[1], c1[2]) + colour_diff
+
+        if self._attr.terrain_type in [TerrainType.ARCTIC, TerrainType.DEEP_WATER, TerrainType.SHALLOW_WATER]:
+            c1, c2 = HexAttr.colour_mapping.get_colour(self._attr.terrain_type)
+            alt: float = self._attr.altitude
+            alt1, alt2 = HexAttr.altitude_mapping.get_altitude(self._attr.terrain_altitude).get()
+            height_mult: float = (alt - alt1) / abs(alt2 - alt1)
+            colour_diff: V3[int] = (V3(c2[0], c2[1], c2[2]) - V3(c1[0], c1[1], c1[2])).to_float().scalar_mul(height_mult).to_int()
+            return V3(c1[0], c1[1], c1[2]) + colour_diff
+        else:
+            tt: TerrainType = self._attr.terrain_type
+            c, _ = HexAttr.colour_mapping.get_colour(tt) 
+            a = self._attr.terrain_altitude
+            h = self._attr.terrain_humidity
+            t = self._attr.terrain_temperature
+            
+            tt_h_min = HexAttr.terrain_mapping.get_terrain_type(a, TerrainHumidity(h - 1), t) if h - 1 >= 0 else tt
+            tt_h_plus = HexAttr.terrain_mapping.get_terrain_type(a, TerrainHumidity(h + 1), t) if h + 1 < len(TerrainHumidity) else tt
+            tt_t_min = HexAttr.terrain_mapping.get_terrain_type(a, h, TerrainTemperature(t - 1)) if t - 1 >= 1 else tt
+            tt_t_plus = HexAttr.terrain_mapping.get_terrain_type(a, h, TerrainTemperature(t + 1)) if t + 1 < len(TerrainTemperature) else tt
+
+            c_h_min, _ = HexAttr.colour_mapping.get_colour(tt_h_min)
+            c_h_plus, _ = HexAttr.colour_mapping.get_colour(tt_h_plus)
+            c_t_min, _ = HexAttr.colour_mapping.get_colour(tt_t_min)
+            c_t_plus, _ = HexAttr.colour_mapping.get_colour(tt_t_plus)
+
+            h1, h2 = HexAttr.humidity_mapping.get_humidity(h).get()
+            t1, t2 = HexAttr.temperature_mapping.get_temperature(t).get()
+
+            h3 = h1 + (h2 - h1) / 2
+            t3 = t1 + (t2 - t1) / 2
+
+            cv = V3(c[0], c[1], c[2])
+            cv_h_min = V3(c_h_min[0], c_h_min[1], c_h_min[2])
+            cv_h_plus = V3(c_h_plus[0], c_h_plus[1], c_h_plus[2])
+            cv_t_min = V3(c_t_min[0], c_t_min[1], c_t_min[2])
+            cv_t_plus = V3(c_t_plus[0], c_t_plus[1], c_t_plus[2])
+            
+            # cv_h = cv
+            # if tt != tt_h_min and self._attr.humidity < h3:
+            #     h_mult = (self._attr.humidity - h1) / (h3 - h1)
+            #     cv_h = interpolate_v3(cv, cv_h_min, (1 - h_mult) / 2)
+            # elif tt != tt_h_plus:
+            #     h_mult = (self._attr.humidity - h3) / (h2 - h3)
+            #     cv_h = interpolate_v3(cv, cv_h_plus, h_mult / 2)
+
+            # cv_t = cv
+            # if tt != tt_t_min and self._attr.temperature < t3:
+            #     t_mult = (self._attr.temperature - t1) / (t3 - t1)
+            #     cv_t = interpolate_v3(cv, cv_t_min, (1 - t_mult) / 2)
+            # elif tt != tt_t_plus:
+            #     t_mult = (self._attr.temperature - t3) / (t2 - t3)
+            #     cv_t = interpolate_v3(cv, cv_t_plus, t_mult / 2)
+
+
+            h_mult = 0.0
+            cv_h = cv
+            if tt != tt_h_min and self._attr.humidity < h3:
+                h_mult = (1 - ((self._attr.humidity - h1) / (h3 - h1))) / 2
+                cv_h = cv_h_min
+            elif tt != tt_h_plus:
+                h_mult = ((self._attr.humidity - h3) / (h2 - h3)) / 2
+                cv_h = cv_h_plus
+
+            t_mult = 0.0
+            cv_t = cv
+            if tt != tt_t_min and self._attr.temperature < t3:
+                t_mult = (1 - ((self._attr.temperature - t1) / (t3 - t1))) / 2
+                cv_t = cv_t_min
+            elif tt != tt_t_plus:
+                t_mult = ((self._attr.temperature - t3) / (t2 - t3)) / 2
+                cv_t = cv_t_plus
+
+            # return cv_t
+            # test = interpolate_v3(cv_h, cv_t, 0.5)
+            # d = test - cv
+            # return cv + d.scalar_mul(2)
+            return bilinear_interpolate_v3(cv, cv_h, cv_t, cv, h_mult, t_mult)
     
     def get_shading_mult(self) -> float:
         shading_mult = 1.0
@@ -309,8 +381,21 @@ class Hex(pk.model.Model):
         return shading_mult
     
     def determine_colour(self) -> V3[int]:
-        colour: V3[int] = self.get_terrain_colour()
-        colour = colour.to_float().scalar_mul(self.get_shading_mult()).to_int().min(V3(255, 255, 255)).max(V3(0, 0, 0))
+        colour: V3[int] = V3(0, 0, 0)
+        match Cfg.COLOUR_SCHEME:
+            case ColourScheme.TERRAIN:
+                colour = self.get_terrain_colour()
+                colour = colour.to_float().scalar_mul(self.get_shading_mult()).to_int().min(V3(255, 255, 255)).max(V3(0, 0, 0))
+            case ColourScheme.HEIGHTMAP:
+                c1: pg.Color = Cfg.C_LOW
+                c2: pg.Color = Cfg.C_HIGH
+                colour = interpolate_v3(V3(c1[0], c1[1], c1[2]), V3(c2[1], c2[2], c2[3]), self._attr.altitude)
+            case ColourScheme.HUMIDITYMAP:
+                h: float = (self._attr.humidity * Cfg.H_H_LOW + (1 - self._attr.humidity) * Cfg.H_H_HIGH) / 360
+                colour = V3(*colorsys.hls_to_rgb(h, Cfg.H_L, Cfg.H_S)).scalar_mul(255).to_int()
+            case ColourScheme.TEMPERATUREMAP:
+                h: float = (self._attr.temperature * Cfg.T_H_LOW + (1 - self._attr.temperature) * Cfg.T_H_HIGH) / 360
+                colour = V3(*colorsys.hls_to_rgb(h, Cfg.T_L, Cfg.T_S)).scalar_mul(255).to_int()
         return colour
     
     def update_element_rect(self) -> None:
@@ -691,6 +776,13 @@ class HexController(pk.model.Model):
     def reset_map(self) -> None:
         Cfg.read_terrain_config()
         HexAttr.init()
+        self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
+        self._view.flags.init = True
+        self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
+        pass
+
+    def redraw_map(self) -> None:
+        Cfg.read_terrain_config()
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
