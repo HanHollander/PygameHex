@@ -10,14 +10,15 @@ from view.hex import HexView
 
 class Game(pk.model.Model):
 
-    def __init__(self, hex_view: HexView, hex_controller: HexController) -> None:
+    def __init__(self, hex_view: HexView, hex_controller: HexController, pynkie: pk.run.Pynkie) -> None:
         pk.model.Model.__init__(self)
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
         self.min_fps: int = Cfg.MAX_FRAMERATE
         self.max_fps: int = 0
-        # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
+        
+        self.pynkie: pk.run.Pynkie = pynkie
 
     def update(self, dt: float) -> None:
         if dt > 0:
@@ -53,6 +54,8 @@ class Game(pk.model.Model):
             self.hex_controller.reset_map()
         if event.key == pg.K_c:
             self.hex_controller.redraw_map()
+        if event.key == pg.K_d:
+            self.pynkie.set_debug_info(not self.pynkie.debug_info)
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)

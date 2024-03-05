@@ -1,5 +1,6 @@
 from __future__ import annotations
 import numpy as np
+import pygame as pg
 from typing import Protocol, TypeVar, Generic, Any
 import colorsys
 
@@ -34,6 +35,25 @@ def bilinear_interpolate_v3(v1, v2, v3, v4, x, y):
     i2 = interpolate_v3(v3, v4, x)
     return interpolate_v3(i1, i2, y)
 
+
+def interpolate_hsv(v1: V3[int], v2: V3[int], x: float) -> V3[int]:
+    hsv1 = colorsys.rgb_to_hsv(*(v1.scalar_truediv(255).get()))
+    hsv2 = colorsys.rgb_to_hsv(*(v2.scalar_truediv(255).get()))
+
+    h: float = (1.0 - x) * hsv1[0] + x * hsv2[0]
+    s: float = (1.0 - x) * hsv1[1] + x * hsv2[1]
+    v: float = (1.0 - x) * hsv1[2] + x * hsv2[2]
+
+    hsv = colorsys.hsv_to_rgb(h, s, v)
+    return V3(*hsv).scalar_mul(255).to_int()
+
+def bilinear_interpolate_hsv(v1, v2, v3, v4, x, y):
+    i1 = interpolate_hsv(v1, v2, x)
+    i2 = interpolate_hsv(v3, v4, x)
+    return interpolate_hsv(i1, i2, y)
+
+def get_v3_from_colour(c: pg.Color) -> V3[int]:
+    return V3(c[0], c[1], c[2])
 
 
 _T = TypeVar('_T')

@@ -27,6 +27,7 @@ class ColourScheme(Enum):
     HEIGHTMAP = 1
     HUMIDITYMAP = 2
     TEMPERATUREMAP = 3
+    GRADIENT = 4
 
 
 def v2_converter(s: str) -> V2[int]:
@@ -171,6 +172,7 @@ class Cfg:
     H_CONTINENT_MASK_THRESHOLD: float
     H_MOUNTAIN_MASK_NOISE_WEIGHT: float
     H_MOUNTAIN_MASK_THRESHOLD: float
+    H_HEIGHTMAP_MASK_NOISE_WEIGHT: float
 
     T_FREEZING: float
     T_COLD: float
@@ -187,18 +189,19 @@ class Cfg:
     COLOUR_SCHEME: ColourScheme
 
     SHADING_MULT: float
-    C_ARCTIC: tuple[pg.Color, pg.Color]
-    C_TUNDRA: tuple[pg.Color, pg.Color]
-    C_STEPPE: tuple[pg.Color, pg.Color]
-    C_SAVANNA: tuple[pg.Color, pg.Color]
-    C_DESERT: tuple[pg.Color, pg.Color]
-    C_BOREAL: tuple[pg.Color, pg.Color]
-    C_TEMPERATE: tuple[pg.Color, pg.Color]
-    C_MEDITERRANEAN: tuple[pg.Color, pg.Color]
-    C_TROPIC: tuple[pg.Color, pg.Color]
-    C_SHALLOW_WATER: tuple[pg.Color, pg.Color]
-    C_DEEP_WATER: tuple[pg.Color, pg.Color]
-    C_VOID: tuple[pg.Color, pg.Color]
+    SEA_SHADING_MULT_MODIF: float
+    C_ARCTIC: pg.Color
+    C_TUNDRA: pg.Color
+    C_STEPPE: pg.Color
+    C_SAVANNA: pg.Color
+    C_DESERT: pg.Color
+    C_BOREAL: pg.Color
+    C_TEMPERATE: pg.Color
+    C_MEDITERRANEAN: pg.Color
+    C_TROPIC: pg.Color
+    C_SHALLOW_WATER: pg.Color
+    C_DEEP_WATER: pg.Color
+    C_VOID: pg.Color
 
     C_LOW: pg.Color
     C_HIGH: pg.Color
@@ -212,6 +215,11 @@ class Cfg:
     T_H_HIGH: int
     T_S: float
     T_L: float
+
+    C_G_1: pg.Color
+    C_G_2: pg.Color
+    C_G_3: pg.Color
+    C_G_4: pg.Color
 
     @staticmethod
     def read_terrain_config() -> None:
@@ -299,6 +307,7 @@ class Cfg:
         Cfg.H_CONTINENT_MASK_THRESHOLD = humidity.getfloat("H_CONTINENT_MASK_THRESHOLD")
         Cfg.H_MOUNTAIN_MASK_NOISE_WEIGHT = humidity.getfloat("H_MOUNTAIN_MASK_NOISE_WEIGHT")
         Cfg.H_MOUNTAIN_MASK_THRESHOLD = humidity.getfloat("H_MOUNTAIN_MASK_THRESHOLD")
+        Cfg.H_HEIGHTMAP_MASK_NOISE_WEIGHT = humidity.getfloat("H_HEIGHTMAP_MASK_NOISE_WEIGHT")
 
         temperature: SectionProxy = config["temperature"]
         Cfg.T_FREEZING = temperature.getfloat("T_FREEZING")
@@ -318,18 +327,19 @@ class Cfg:
 
         terrainmap: SectionProxy = config["colours.terrainmap"]
         Cfg.SHADING_MULT = terrainmap.getfloat("SHADING_MULT")
-        Cfg.C_ARCTIC = terrainmap.getclrtuple("C_ARCTIC")
-        Cfg.C_TUNDRA = terrainmap.getclrtuple("C_TUNDRA")
-        Cfg.C_STEPPE = terrainmap.getclrtuple("C_STEPPE")
-        Cfg.C_SAVANNA = terrainmap.getclrtuple("C_SAVANNA")
-        Cfg.C_DESERT = terrainmap.getclrtuple("C_DESERT")
-        Cfg.C_BOREAL = terrainmap.getclrtuple("C_BOREAL")
-        Cfg.C_TEMPERATE = terrainmap.getclrtuple("C_TEMPERATE")
-        Cfg.C_MEDITERRANEAN = terrainmap.getclrtuple("C_MEDITERRANEAN")
-        Cfg.C_TROPIC = terrainmap.getclrtuple("C_TROPIC")
-        Cfg.C_SHALLOW_WATER = terrainmap.getclrtuple("C_SHALLOW_WATER")
-        Cfg.C_DEEP_WATER = terrainmap.getclrtuple("C_DEEP_WATER")
-        Cfg.C_VOID = terrainmap.getclrtuple("C_VOID")
+        Cfg.SEA_SHADING_MULT_MODIF = terrainmap.getfloat("SEA_SHADING_MULT_MODIF")
+        Cfg.C_ARCTIC = pg.Color(terrainmap.get("C_ARCTIC"))
+        Cfg.C_TUNDRA = pg.Color(terrainmap.get("C_TUNDRA"))
+        Cfg.C_STEPPE = pg.Color(terrainmap.get("C_STEPPE"))
+        Cfg.C_SAVANNA = pg.Color(terrainmap.get("C_SAVANNA"))
+        Cfg.C_DESERT = pg.Color(terrainmap.get("C_DESERT"))
+        Cfg.C_BOREAL = pg.Color(terrainmap.get("C_BOREAL"))
+        Cfg.C_TEMPERATE = pg.Color(terrainmap.get("C_TEMPERATE"))
+        Cfg.C_MEDITERRANEAN = pg.Color(terrainmap.get("C_MEDITERRANEAN"))
+        Cfg.C_TROPIC = pg.Color(terrainmap.get("C_TROPIC"))
+        Cfg.C_SHALLOW_WATER = pg.Color(terrainmap.get("C_SHALLOW_WATER"))
+        Cfg.C_DEEP_WATER = pg.Color(terrainmap.get("C_DEEP_WATER"))
+        Cfg.C_VOID = pg.Color(terrainmap.get("C_VOID"))
 
         heightmap: SectionProxy = config["colours.heightmap"]
         Cfg.C_LOW = pg.Color(heightmap.get("C_LOW"))
@@ -346,3 +356,9 @@ class Cfg:
         Cfg.T_H_HIGH = temperaturemap.getint("T_H_HIGH")
         Cfg.T_S = temperaturemap.getfloat("T_S")
         Cfg.T_L = temperaturemap.getfloat("T_L")
+
+        gradient: SectionProxy = config["colours.gradient"]
+        Cfg.C_G_1 = pg.Color(gradient.get("C_G_1"))
+        Cfg.C_G_2 = pg.Color(gradient.get("C_G_2"))
+        Cfg.C_G_3 = pg.Color(gradient.get("C_G_3"))
+        Cfg.C_G_4 = pg.Color(gradient.get("C_G_4"))

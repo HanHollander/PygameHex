@@ -26,7 +26,7 @@ display_message(pynkie.display, "> initialising hex controller...")
 hex_controller: HexController = HexController(hex_view, pynkie.display)  ## TODO TAKES LONG
 
 display_message(pynkie.display, "> initialising main game model...")
-game = Game(hex_view, hex_controller)
+game = Game(hex_view, hex_controller, pynkie)
 
 display_message(pynkie.display, "> adding views...")
 pynkie.add_view(hex_view)

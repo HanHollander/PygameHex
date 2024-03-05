@@ -102,10 +102,7 @@ class TerrainMapping:
 
     def get_terrain_type(self, altitude: TerrainAltitude, humidity: TerrainHumidity, temperature: TerrainTemperature) -> TerrainType:
         if altitude in [TerrainAltitude.DEEP_WATER, TerrainAltitude.SHALLOW_WATER]:
-            if temperature == TerrainTemperature.FREEZING:
-                return TerrainType.ARCTIC
-            else:
-                return TerrainType.DEEP_WATER if altitude == TerrainAltitude.DEEP_WATER else TerrainType.SHALLOW_WATER
+            return TerrainType.DEEP_WATER if altitude == TerrainAltitude.DEEP_WATER else TerrainType.SHALLOW_WATER
         return self._mapping[humidity][temperature]
 
 
@@ -190,7 +187,7 @@ class TerrainColourMapping:
 
     def __init__(self) -> None:
 
-        self._mapping: dict[TerrainType, tuple[pg.Color, pg.Color]] = {
+        self._mapping: dict[TerrainType, pg.Color] = {
             TerrainType.ARCTIC: Cfg.C_ARCTIC,
             TerrainType.TUNDRA: Cfg.C_TUNDRA,
             TerrainType.STEPPE: Cfg.C_STEPPE,
@@ -205,7 +202,7 @@ class TerrainColourMapping:
             TerrainType.VOID: Cfg.C_VOID
         }
 
-    def get_colour(self, terrain_type: TerrainType) -> tuple[pg.Color, pg.Color]:
+    def get_colour(self, terrain_type: TerrainType) -> pg.Color:
         return self._mapping[terrain_type]
 
 
@@ -377,7 +374,7 @@ class TerrainHeightmap:
 
 class TerrainHumiditymap:
 
-    def __init__(self, continents: FArray, mountains: FArray) -> None:
+    def __init__(self, continents: FArray, mountains: FArray, heightmap: FArray) -> None:
 
         def ns_mask() -> FArray: 
             mask: FArray = np.ones(noise_dim.get())
@@ -417,6 +414,13 @@ class TerrainHumiditymap:
             mask += Cfg.H_MOUNTAIN_MASK_NOISE_WEIGHT * mountain_mask
             mask = normalise(mask)
 
+            # dryer (lower mask) at higher altitudes (above midway A_LOW/A_MEDIUM)
+            interior_mask: FArray = heightmap.copy()
+            interior_mask -= Cfg.A_LOW + ((Cfg.A_MEDIUM - Cfg.A_LOW) / 2)
+            interior_mask = np.clip(interior_mask, 0.0, 1.0)
+            mask -= Cfg.H_HEIGHTMAP_MASK_NOISE_WEIGHT * interior_mask
+            mask = np.clip(mask, 0.0, 1.0)
+
             # terrain noise
             terrain0_noise: FArray = normal_noise(Cfg.TERRAIN0_NOISE_FREQUENCY.get())
             terrain1_noise: FArray = normal_noise(Cfg.TERRAIN1_NOISE_FREQUENCY.get())
@@ -425,7 +429,6 @@ class TerrainHumiditymap:
                 (Cfg.TERRAIN1_NOISE_WEIGHT * terrain0_noise) + \
                 (Cfg.TERRAIN1_NOISE_WEIGHT * terrain1_noise) + \
                 (Cfg.TERRAIN2_NOISE_WEIGHT * terrain2_noise)
-            
             
             return mask
 
@@ -456,7 +459,7 @@ class TerrainTemperaturemap:
             mask = gaussian_filter(mask, noise_dim.scalar_truediv(Cfg.NS_MASK_GAUSSIAN_FILTER_SIZE).to_int().get()) # type: ignore
             assert isinstance(mask, NDArray)
 
-            # colder (lower mask) at higher elevation (above A_MEDIUM)
+            # colder (lower mask) at higher altitudes (above A_LOW)
             interior_mask: FArray = heightmap.copy()
             interior_mask -= Cfg.A_LOW
             interior_mask = np.clip(interior_mask, 0.0, 1.0)
