@@ -53,8 +53,6 @@ def bilinear_interpolate_hsv(v1: V3[int], v2: V3[int], v3: V3[int], v4: V3[int],
     hsv: V3[float] =  hsv1.scalar_mul((1 - x) * (1 - y)) + hsv3.scalar_mul((1 - x) * y) + hsv2.scalar_mul(x * (1 - y)) + hsv4.scalar_mul(x * y)
     return V3(*colorsys.hsv_to_rgb(*(hsv.get()))).scalar_mul(255).to_int()
 
-    
-
 def get_v3_from_colour(c: pg.Color) -> V3[int]:
     return V3(c[0], c[1], c[2])
 

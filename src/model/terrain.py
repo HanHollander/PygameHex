@@ -194,7 +194,7 @@ class TerrainColourMapping:
 
     def __init__(self) -> None:
 
-        self._mapping: dict[TerrainType, pg.Color] = {
+        self.mapping: dict[TerrainType, pg.Color] = {
             TerrainType.ARCTIC: cfg.C_ARCTIC,
             TerrainType.TUNDRA: cfg.C_TUNDRA,
             TerrainType.STEPPE: cfg.C_STEPPE,
@@ -210,7 +210,7 @@ class TerrainColourMapping:
         }
 
     def get_colour(self, terrain_type: TerrainType) -> pg.Color:
-        return self._mapping[terrain_type]
+        return self.mapping[terrain_type]
 
 
 # ==== MAPS === #
@@ -393,7 +393,7 @@ class TerrainHumiditymap:
             mask[:, :int(noise_dim.y() * cfg.H_1)] = H_ARID
             mask[:, :int(noise_dim.y() * cfg.H_2)] = H_AVERAGE
             mask[:, :int(noise_dim.y() * cfg.H_3)] = H_HUMID
-            mask[:, :int(noise_dim.y() * cfg.H_4)] = H_AVERAGE
+            mask[:, :int(noise_dim.y() * cfg.H_4)] = H_ARID
             mask[:, int(noise_dim.y() - noise_dim.y() * cfg.H_0):] = 1.0
             mask[:, int(noise_dim.y() - noise_dim.y() * cfg.H_1):] = H_ARID
             mask[:, int(noise_dim.y() - noise_dim.y() * cfg.H_2):] = H_AVERAGE

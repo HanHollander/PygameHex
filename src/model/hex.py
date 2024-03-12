@@ -1,4 +1,5 @@
 import colorsys
+import ctypes
 from threading import Thread
 import time
 from bisect import bisect
@@ -234,9 +235,15 @@ class HexAttr():
     temperaturemap: TerrainTemperaturemap
     gradient_bounds_h: GradientBoundList[TerrainHumidity]
     gradient_bounds_t: GradientBoundList[TerrainTemperature]
+    seed: int = 0
 
     @staticmethod
-    def init() -> None:
+    def init(reseed: bool = False) -> None:
+        if reseed:
+            HexAttr.seed = int(np.random.rand() * (2**32 - 1))
+        np.random.seed(HexAttr.seed)
+        print("seed: " + str(HexAttr.seed))
+
         HexAttr.terrain_mapping = TerrainMapping()
         HexAttr.altitude_mapping = TerrainAltitudeMapping()
         HexAttr.humidity_mapping = TerrainHumidityMapping()
@@ -278,7 +285,7 @@ class Hex(pk.model.Model):
     dim_float: V2[float]
     orientation: HexOrientation  # pointy or flat top
 
-    created: int = 0
+    n_created: int = 0
 
     @staticmethod
     def calc_dim() -> tuple[V2[int], V2[float]]:
@@ -312,9 +319,9 @@ class Hex(pk.model.Model):
         colour: V3[int] = self.determine_colour()
         self._element: HexSpriteElement = HexSpriteElement(pos, img, colour)
 
-        Hex.created += 1  # keep track of how many hexes have been created, and report to main thread
+        Hex.n_created += 1  # keep track of how many hexes have been created, and report to main thread
         inc: int = (cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()) // 100
-        if not (Hex.created % inc) :
+        if not (Hex.n_created % inc) :
             time.sleep(0.00000001)  # microsleep to yield GIL to main thread
 
     def ax(self) -> Ax:
@@ -362,6 +369,10 @@ class Hex(pk.model.Model):
         if t < HexAttr.temperature_mapping.get_temperature(TerrainTemperature.COLD)[0]:
             return get_v3_from_colour(cfg.C_ARCTIC)
         
+        # special case: shallow water
+        if tt == TerrainType.SHALLOW_WATER:
+            return get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt))
+        
         t_min: float = HexAttr.gradient_bounds_t.min1
         t_max: float = HexAttr.gradient_bounds_t.max
         h_min: float = HexAttr.gradient_bounds_h.min0
@@ -377,8 +388,8 @@ class Hex(pk.model.Model):
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t0.t]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t1.t]
 
-            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
-            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
+            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt0])
+            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt1])
             x: float = (t1.b - t) / (t1.b - t0.b)
 
             return interpolate_hsv(c1, c0, x)
@@ -389,8 +400,8 @@ class Hex(pk.model.Model):
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][terrain_temperature]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][terrain_temperature] 
 
-            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
-            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
+            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt0])
+            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt1])
             y: float = (h1.b - h) / (h1.b - h0.b)
 
             return interpolate_hsv(c1, c0, y)
@@ -404,10 +415,10 @@ class Hex(pk.model.Model):
             tt2: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][t0.t]
             tt3: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][t1.t]
 
-            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
-            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
-            c2: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt2))
-            c3: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt3))
+            c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt0])
+            c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt1])
+            c2: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt2])
+            c3: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.mapping[tt3])
             x = (t1.b - t) / (t1.b - t0.b)
             y = (h1.b - h) / (h1.b - h0.b)
 
@@ -727,13 +738,13 @@ class HexController(pk.model.Model):
         thread.start()
         hex_created: int = 0
         t_start: float = time.time()
-        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), False)
+        display_message(display, "        > hexes created: " + str(Hex.n_created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), False)
         while thread.is_alive():
-            if hex_created != Hex.created:
-                display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), True)
-                hex_created = Hex.created
+            if hex_created != Hex.n_created:
+                display_message(display, "        > hexes created: " + str(Hex.n_created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), True)
+                hex_created = Hex.n_created
         t_end: float = time.time()
-        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()) \
+        display_message(display, "        > hexes created: " + str(Hex.n_created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()) \
                                + " (took " + "{0:.3}".format(t_end - t_start) + "s)", True)
             
     def __init__(self, view: "HexView", display: pg.Surface) -> None:
@@ -742,7 +753,7 @@ class HexController(pk.model.Model):
         Hex.orientation = cfg.HEX_ORIENTATION
         Hex.set_size(cfg.HEX_MAX_SIZE)
         display_message(display, "    > initialising hex attributes")
-        HexAttr.init()
+        HexAttr.init(True)
         display_message(display, "    > initialising sprite store")
         HexSpriteStore.init_store()
         display_message(display, "    > initialising hex store")
@@ -759,27 +770,27 @@ class HexController(pk.model.Model):
         pk.model.Model.update(self, dt)
 
         if self._view.flags.request_reset_chunks:
-            print(HexController.i, "request_reset_chunks")
+            if cfg.DEBUG_INFO: print(HexController.i, "request_reset_chunks")
             self._view.flags.request_reset_chunks = False
             self._store.reset_chunks()
 
         if self._view.flags.request_reset_chunk_update_status:
-            print(HexController.i, "request reset chunk update status")
+            if cfg.DEBUG_INFO: print(HexController.i, "request reset chunk update status")
             self._view.flags.request_reset_chunk_update_status = False
             self._store.reset_chunk_update_status()
 
         if self._view.flags.request_reset_scaled_store:
-            print(HexController.i, "request_reset_scaled_store")
+            if cfg.DEBUG_INFO: print(HexController.i, "request_reset_scaled_store")
             self._view.flags.request_reset_scaled_store = False
             HexSpriteStore.reset_scaled_store()
 
         if self._view.flags.request_update_in_camera:
-            print(HexController.i, "request_update_in_camera")
+            if cfg.DEBUG_INFO: print(HexController.i, "request_update_in_camera")
             self._view.flags.request_update_in_camera = False
             self._store.update_in_camera(self._view.get_min_max_of())
 
         if self._view.flags.request_update_chunk_surface:
-            print(HexController.i, "request_update_chunk_surface")
+            if cfg.DEBUG_INFO: print(HexController.i, "request_update_chunk_surface")
             self._view.flags.request_update_chunk_surface = False
             self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
 
@@ -816,18 +827,19 @@ class HexController(pk.model.Model):
     def reset_map(self) -> None:
         t_start: float = time.time()
         cfg.read_terrain_config()
-        HexAttr.init()
+        HexAttr.init(True)
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
         t: float = time.time() - t_start
-        print("reset_map took " + "{0:.3}".format(t) + " ms")
+        if cfg.DEBUG_INFO: print("reset_map took " + "{0:.3}".format(t) + " ms")
 
     def redraw_map(self) -> None:
         t_start: float = time.time()
         cfg.read_terrain_config()
+        HexAttr.init(False)
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
         t: float = time.time() - t_start
-        print("redraw_map took " + "{0:.3}".format(t) + " ms")
+        if cfg.DEBUG_INFO: print("redraw_map took " + "{0:.3}".format(t) + " ms")
