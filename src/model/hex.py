@@ -214,9 +214,14 @@ class HexAttr():
         def __len__(self) -> int:
             return len(self.list)
         def set_min_max(self) -> None:
-            self.min1 = self[0]
-            self.min0 = self[1]
+            self.min0 = self[0]
+            self.min1 = self[1]
             self.max = self[len(self) - 1]
+        def find_bounds(self, v: float) -> tuple["HexAttr.GradientBound[T_ENUM]", "HexAttr.GradientBound[T_ENUM]"]:
+            i: int = bisect(self, v)
+            lower: HexAttr.GradientBound[T_ENUM] = self.at(0) if i == 0 else self.at(i - 1)
+            higher: HexAttr.GradientBound[T_ENUM] = self.at(len(self) - 1) if i == len(self) else self.at(i)
+            return (lower, higher)
 
     # static class variables
     terrain_mapping: TerrainMapping
@@ -253,13 +258,6 @@ class HexAttr():
             bound: float = t0 + ((t1 - t0) / 2)
             HexAttr.gradient_bounds_t.append(HexAttr.GradientBound(bound, terrain_temperature_idx))
         HexAttr.gradient_bounds_t.set_min_max()
-
-    @staticmethod
-    def find_bounds(v: float, gradient_bounds: GradientBoundList[T_ENUM]) -> tuple[GradientBound[T_ENUM], GradientBound[T_ENUM]]:
-        i: int = bisect(gradient_bounds, v)
-        lower: HexAttr.GradientBound[T_ENUM] = gradient_bounds.at(0) if i == 0 else gradient_bounds.at(i - 1)
-        higher: HexAttr.GradientBound[T_ENUM] = gradient_bounds.at(len(gradient_bounds) - 1) if i == len(gradient_bounds) else gradient_bounds.at(i)
-        return (lower, higher)
 
     def __init__(self, hex: "Hex") -> None:
         of: V2[int] = Ax.ax_to_of(hex.ax())
@@ -337,10 +335,8 @@ class Hex(pk.model.Model):
         of: V2[int] = Ax.ax_to_of(self._ax)
         
         gradient_2std: V2[float] = HexAttr.heightmap.get_gradient_std()
-        gradient_x: float = clip(HexAttr.heightmap.get_x_gradient_from_of(of),
-                                 -gradient_2std.x(), gradient_2std.x())
-        gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(of),
-                                 -gradient_2std.y(), gradient_2std.y())
+        gradient_x: float = clip(HexAttr.heightmap.get_x_gradient_from_of(of), -gradient_2std.x(), gradient_2std.x())
+        gradient_y: float = clip(HexAttr.heightmap.get_y_gradient_from_of(of), -gradient_2std.y(), gradient_2std.y())
         
         mult_x: float = 1.0 - (gradient_x / gradient_2std.x() * (1.0 - cfg.SHADING_MULT))
         shading_mult *= 1 / mult_x
@@ -376,7 +372,7 @@ class Hex(pk.model.Model):
             return get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt))
         elif (t >= t_min or t <= t_max) and (h < h_min or h > h_max):
             # top/bottom edge, temperature gradient
-            t0, t1 = HexAttr.find_bounds(t, HexAttr.gradient_bounds_t)
+            t0, t1 = HexAttr.gradient_bounds_t.find_bounds(t)
 
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t0.t]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t1.t]
@@ -388,7 +384,7 @@ class Hex(pk.model.Model):
             return interpolate_hsv(c1, c0, x)
         elif (t < t_min or t > t_max) and (h >= h_min or h <= h_max):
             # left/right edge, humidity gradient
-            h0, h1 = HexAttr.find_bounds(h, HexAttr.gradient_bounds_h)
+            h0, h1 = HexAttr.gradient_bounds_h.find_bounds(h)
 
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][terrain_temperature]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][terrain_temperature] 
@@ -400,8 +396,8 @@ class Hex(pk.model.Model):
             return interpolate_hsv(c1, c0, y)
         else:
             # middle, temperature and humidity gradient
-            h0, h1 = HexAttr.find_bounds(h, HexAttr.gradient_bounds_h)
-            t0, t1 = HexAttr.find_bounds(t, HexAttr.gradient_bounds_t)
+            h0, h1 = HexAttr.gradient_bounds_h.find_bounds(h)
+            t0, t1 = HexAttr.gradient_bounds_t.find_bounds(t)
             
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][t0.t]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][t1.t]
@@ -716,7 +712,6 @@ class HexController(pk.model.Model):
         hex.set_attr(HexAttr(hex))
         hex.set_colour(hex.determine_colour())
 
-
     @staticmethod
     def update_topleft_and_bottomright(_: "HexController | None", chunk: HexChunk) -> None:
         chunk.reset_topleft()
@@ -731,12 +726,15 @@ class HexController(pk.model.Model):
         thread = Thread(target=self.init_store_job, args=[self])
         thread.start()
         hex_created: int = 0
+        t_start: float = time.time()
         display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), False)
         while thread.is_alive():
             if hex_created != Hex.created:
                 display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), True)
                 hex_created = Hex.created
-        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()), True)
+        t_end: float = time.time()
+        display_message(display, "        > hexes created: " + str(Hex.created) + "/" + str(cfg.HEX_NOF_HEXES.x() * cfg.HEX_NOF_HEXES.y()) \
+                               + " (took " + "{0:.3}".format(t_end - t_start) + "s)", True)
             
     def __init__(self, view: "HexView", display: pg.Surface) -> None:
         pk.model.Model.__init__(self)
@@ -816,16 +814,20 @@ class HexController(pk.model.Model):
         return self._store.get_hex_at_of(of) 
     
     def reset_map(self) -> None:
+        t_start: float = time.time()
         cfg.read_terrain_config()
         HexAttr.init()
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
-        pass
+        t: float = time.time() - t_start
+        print("reset_map took " + "{0:.3}".format(t) + " ms")
 
     def redraw_map(self) -> None:
+        t_start: float = time.time()
         cfg.read_terrain_config()
         self.apply_to_all_hex_in_store(HexController.update_attr_and_colour)
         self._view.flags.init = True
         self._view.update_chunk_surface(self._store.in_camera(), self._store.in_camera_topleft(), self._store.in_camera_bottomright())
-        pass
+        t: float = time.time() - t_start
+        print("redraw_map took " + "{0:.3}".format(t) + " ms")
