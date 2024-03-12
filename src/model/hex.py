@@ -202,6 +202,9 @@ class HexAttr():
     class GradientBoundList(Generic[T_ENUM]):
         def __init__(self) -> None:
             self.list: list[HexAttr.GradientBound[T_ENUM]] = []
+            self.min0: float = 0.0
+            self.min1: float = 0.0
+            self.max: float = 1.0
         def __getitem__(self, i: int) -> float:
             return self.list[i].b
         def at(self, i: int) -> "HexAttr.GradientBound[T_ENUM]":
@@ -210,6 +213,10 @@ class HexAttr():
             self.list.append(v)
         def __len__(self) -> int:
             return len(self.list)
+        def set_min_max(self) -> None:
+            self.min1 = self[0]
+            self.min0 = self[1]
+            self.max = self[len(self) - 1]
 
     # static class variables
     terrain_mapping: TerrainMapping
@@ -239,11 +246,13 @@ class HexAttr():
             h0, h1 = HexAttr.humidity_mapping.get_humidity(terrain_humidity_idx).get()
             bound: float = h0 + ((h1 - h0) / 2)
             HexAttr.gradient_bounds_h.append(HexAttr.GradientBound(bound, terrain_humidity_idx))
+        HexAttr.gradient_bounds_h.set_min_max()
         HexAttr.gradient_bounds_t = HexAttr.GradientBoundList()
         for terrain_temperature_idx in TerrainTemperature:
             t0, t1 = HexAttr.temperature_mapping.get_temperature(terrain_temperature_idx).get()
             bound: float = t0 + ((t1 - t0) / 2)
             HexAttr.gradient_bounds_t.append(HexAttr.GradientBound(bound, terrain_temperature_idx))
+        HexAttr.gradient_bounds_t.set_min_max()
 
     @staticmethod
     def find_bounds(v: float, gradient_bounds: GradientBoundList[T_ENUM]) -> tuple[GradientBound[T_ENUM], GradientBound[T_ENUM]]:
@@ -356,45 +365,56 @@ class Hex(pk.model.Model):
         # special case: freezing
         if t < HexAttr.temperature_mapping.get_temperature(TerrainTemperature.COLD)[0]:
             return get_v3_from_colour(cfg.C_ARCTIC)
+        
+        t_min: float = HexAttr.gradient_bounds_t.min1
+        t_max: float = HexAttr.gradient_bounds_t.max
+        h_min: float = HexAttr.gradient_bounds_h.min0
+        h_max: float = HexAttr.gradient_bounds_h.max
 
-        if (t < HexAttr.gradient_bounds_t[1] or t > HexAttr.gradient_bounds_t[len(HexAttr.gradient_bounds_t) - 1]) and \
-            (h < HexAttr.gradient_bounds_h[0] or h > HexAttr.gradient_bounds_h[len(HexAttr.gradient_bounds_h) - 1]):
+        if (t < t_min or t > t_max) and (h < h_min or h > h_max):
             # corner, only one choice
             return get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt))
-        elif (t >= HexAttr.gradient_bounds_t[1] or t <= HexAttr.gradient_bounds_t[len(HexAttr.gradient_bounds_t) - 1]) and \
-            (h < HexAttr.gradient_bounds_h[0] or h > HexAttr.gradient_bounds_h[len(HexAttr.gradient_bounds_h) - 1]):
+        elif (t >= t_min or t <= t_max) and (h < h_min or h > h_max):
             # top/bottom edge, temperature gradient
             t0, t1 = HexAttr.find_bounds(t, HexAttr.gradient_bounds_t)
+
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t0.t]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[terrain_humidity][t1.t]
+
             c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
             c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
             x: float = (t1.b - t) / (t1.b - t0.b)
+
             return interpolate_hsv(c1, c0, x)
-        elif (t < HexAttr.gradient_bounds_t[1] or t > HexAttr.gradient_bounds_t[len(HexAttr.gradient_bounds_t) - 1]) and \
-            (h >= HexAttr.gradient_bounds_h[0] or h <= HexAttr.gradient_bounds_h[len(HexAttr.gradient_bounds_h) - 1]):
+        elif (t < t_min or t > t_max) and (h >= h_min or h <= h_max):
             # left/right edge, humidity gradient
             h0, h1 = HexAttr.find_bounds(h, HexAttr.gradient_bounds_h)
+
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][terrain_temperature]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][terrain_temperature] 
+
             c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
             c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
             y: float = (h1.b - h) / (h1.b - h0.b)
+
             return interpolate_hsv(c1, c0, y)
         else:
             # middle, temperature and humidity gradient
             h0, h1 = HexAttr.find_bounds(h, HexAttr.gradient_bounds_h)
             t0, t1 = HexAttr.find_bounds(t, HexAttr.gradient_bounds_t)
+            
             tt0: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][t0.t]
             tt1: TerrainType = HexAttr.terrain_mapping.mapping[h0.t][t1.t]
             tt2: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][t0.t]
             tt3: TerrainType = HexAttr.terrain_mapping.mapping[h1.t][t1.t]
+
             c0: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt0))
             c1: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt1))
             c2: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt2))
             c3: V3[int] = get_v3_from_colour(HexAttr.colour_mapping.get_colour(tt3))
             x = (t1.b - t) / (t1.b - t0.b)
             y = (h1.b - h) / (h1.b - h0.b)
+
             return bilinear_interpolate_hsv(c3, c2, c1, c0, x, y)
     
     def determine_colour(self) -> V3[int]:
