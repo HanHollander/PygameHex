@@ -1,5 +1,5 @@
 
-from config import Cfg
+from config import cfg
 import pygame as pg
 import pynkie as pk
 
@@ -13,7 +13,7 @@ def display_message(surface: pg.Surface, message: str, in_place: bool = False)  
     print("loading -", message)
     if (in_place):
         i -= 1
-        black = pg.Surface((Cfg.SCREEN_WIDTH, pk.debug.font_size))
+        black = pg.Surface((cfg.SCREEN_WIDTH, pk.debug.font_size))
         black.fill((0, 0, 0))
         surface.blit(black, (x, y0 + i * pk.debug.font_size))
     surface.blit(pk.debug.font.render(message, pk.debug.antialias, (255, 255, 255)), (x, y0 + i * pk.debug.font_size))

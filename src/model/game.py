@@ -1,5 +1,5 @@
 import sys
-from config import Cfg
+from config import cfg
 import pygame as pg
 import pynkie as pk
 
@@ -15,7 +15,7 @@ class Game(pk.model.Model):
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.min_fps: int = Cfg.MAX_FRAMERATE
+        self.min_fps: int = cfg.MAX_FRAMERATE
         self.max_fps: int = 0
         
         self.pynkie: pk.run.Pynkie = pynkie
@@ -48,7 +48,7 @@ class Game(pk.model.Model):
             pg.quit()
             sys.exit()
         if event.key == pg.K_f:
-            self.min_fps = Cfg.MAX_FRAMERATE
+            self.min_fps = cfg.MAX_FRAMERATE
             self.max_fps = 0
         if event.key == pg.K_r:
             self.hex_controller.reset_map()

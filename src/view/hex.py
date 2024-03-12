@@ -5,7 +5,7 @@ from pygame.event import Event
 import pynkie as pk
 
 from util import RMB, V2
-from config import Cfg
+from config import cfg
 
 
 class HexViewFlags():
@@ -102,7 +102,7 @@ class HexView(pk.view.ScaledView):
 
     def update_and_add_single_chunk_to_surface(self) -> None:
         chunk_nr: int = 0
-        while len(self.chunks_to_be_drawn) > 0 and chunk_nr < Cfg.CHUNKS_PER_FRAME:
+        while len(self.chunks_to_be_drawn) > 0 and chunk_nr < cfg.CHUNKS_PER_FRAME:
             chunk: HexChunk = self.chunks_to_be_drawn.pop()
             filled: bool = False
             updated: bool = False
@@ -177,7 +177,7 @@ class HexView(pk.view.ScaledView):
         pk.debug.debug["Mouse pos (screen, real)"] = [new_mouse_pos, self.get_mouse_pos_offset()]
         if (self.mouse_down[RMB]):
             mouse_diff: V2[int] = self.mouse_pos - new_mouse_pos
-            self.move_viewport(V2(Cfg.DRAG_MOVE_FACTOR * mouse_diff[0], Cfg.DRAG_MOVE_FACTOR * mouse_diff[1]))
+            self.move_viewport(V2(cfg.DRAG_MOVE_FACTOR * mouse_diff[0], cfg.DRAG_MOVE_FACTOR * mouse_diff[1]))
             if self.min_max_chunk_idx_will_change():  # only if min and/or max chunk indices will change next frame (as a result of a pan)
                 self.flags.request_update_in_camera = True
                 self.flags.request_update_chunk_surface = True
@@ -188,24 +188,24 @@ class HexView(pk.view.ScaledView):
         scale: float = 1.
         new_size: int = Hex.size
         if event.y == -1:  # size down, zoom out
-            new_size: int = max(Cfg.HEX_MIN_SIZE, round(Hex.size * (1 / Cfg.ZOOM_STEP_FACTOR)))
+            new_size: int = max(cfg.HEX_MIN_SIZE, round(Hex.size * (1 / cfg.ZOOM_STEP_FACTOR)))
             scale = new_size / Hex.size
         elif event.y == 1:  # size up, zoom in
-            new_size: int = min(Cfg.HEX_MAX_SIZE, round(Hex.size * Cfg.ZOOM_STEP_FACTOR))
+            new_size: int = min(cfg.HEX_MAX_SIZE, round(Hex.size * cfg.ZOOM_STEP_FACTOR))
             scale = new_size / Hex.size
 
         # if zoom happened
         if new_size != Hex.size:
             if scale > 1.:  # chunks smaller (zoom in)
-                if HexChunk.set_nof_hexes(HexChunk.nof_hexes // int(Cfg.ZOOM_STEP_FACTOR)):
-                    HexStore.set_nof_chunks(HexStore.nof_chunks * V2(int(Cfg.ZOOM_STEP_FACTOR), int(Cfg.ZOOM_STEP_FACTOR)))
+                if HexChunk.set_nof_hexes(HexChunk.nof_hexes // int(cfg.ZOOM_STEP_FACTOR)):
+                    HexStore.set_nof_chunks(HexStore.nof_chunks * V2(int(cfg.ZOOM_STEP_FACTOR), int(cfg.ZOOM_STEP_FACTOR)))
                     self.flags.request_reset_chunks = True
             elif scale < 1.:  # chunks bigger (zoom out)
-                if HexChunk.set_nof_hexes(HexChunk.nof_hexes * int(Cfg.ZOOM_STEP_FACTOR)):
-                    HexStore.set_nof_chunks(HexStore.nof_chunks // V2(int(Cfg.ZOOM_STEP_FACTOR), int(Cfg.ZOOM_STEP_FACTOR)))
+                if HexChunk.set_nof_hexes(HexChunk.nof_hexes * int(cfg.ZOOM_STEP_FACTOR)):
+                    HexStore.set_nof_chunks(HexStore.nof_chunks // V2(int(cfg.ZOOM_STEP_FACTOR), int(cfg.ZOOM_STEP_FACTOR)))
                     self.flags.request_reset_chunks = True
 
-            assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == Cfg.HEX_NOF_HEXES
+            assert HexStore.nof_chunks * V2(HexChunk.nof_hexes, HexChunk.nof_hexes) == cfg.HEX_NOF_HEXES
 
             Hex.set_size(new_size)
             HexChunk.set_size_px()
