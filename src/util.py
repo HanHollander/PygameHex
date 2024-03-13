@@ -1,8 +1,8 @@
 from __future__ import annotations
 import numpy as np
+import pygame as pg
 from typing import Protocol, TypeVar, Generic, Any
-
-from nptyping import NDArray
+import colorsys
 
 
 LMB: int = 0
@@ -11,8 +11,9 @@ RMB: int = 2
 MMB_UP: int = 4
 MMB_DOWN: int = 5
 
+FArray = np.ndarray[float, Any]
 
-def normalise(array: NDArray[float, Any]) -> NDArray[float, Any]:
+def normalise(array: FArray) -> FArray:
     array = (array - np.min(array)) / (np.max(array) - np.min(array))
     return array
 
@@ -20,7 +21,43 @@ def even(a: int) -> int:
     return a + (a % 2)
 
 
-_T = TypeVar('_T')
+
+def interpolate_v3(v1: V3[int], v2: V3[int], x: float) -> V3[int]:
+    r1: float = (1.0 - x) * v1[0] + x * v2[0]
+    r2: float = (1.0 - x) * v1[1] + x * v2[1]
+    r3: float = (1.0 - x) * v1[2] + x * v2[2]
+
+    return V3(r1, r2, r3).to_int()
+
+def bilinear_interpolate_v3(v1: V3[int], v2: V3[int], v3: V3[int], v4: V3[int], x: float, y: float) -> V3[int]:
+    i1: V3[int] = interpolate_v3(v1, v2, x)
+    i2: V3[int] = interpolate_v3(v3, v4, x)
+    return interpolate_v3(i1, i2, y)
+
+def interpolate_hsv(v1: V3[int], v2: V3[int], x: float) -> V3[int]:
+    hsv1: tuple[float, float, float] = colorsys.rgb_to_hsv(*(v1.scalar_truediv(255).get()))
+    hsv2: tuple[float, float, float] = colorsys.rgb_to_hsv(*(v2.scalar_truediv(255).get()))
+
+    h: float = (1.0 - x) * hsv1[0] + x * hsv2[0]
+    s: float = (1.0 - x) * hsv1[1] + x * hsv2[1]
+    v: float = (1.0 - x) * hsv1[2] + x * hsv2[2]
+
+    hsv: tuple[float, float, float] = colorsys.hsv_to_rgb(h, s, v)
+    return V3(*hsv).scalar_mul(255).to_int()
+
+def bilinear_interpolate_hsv(v1: V3[int], v2: V3[int], v3: V3[int], v4: V3[int], x: float, y: float) -> V3[int]:
+    hsv1: V3[float] = V3(*colorsys.rgb_to_hsv(*(v1.scalar_truediv(255).get())))
+    hsv2: V3[float] = V3(*colorsys.rgb_to_hsv(*(v2.scalar_truediv(255).get())))
+    hsv3: V3[float] = V3(*colorsys.rgb_to_hsv(*(v3.scalar_truediv(255).get())))
+    hsv4: V3[float] = V3(*colorsys.rgb_to_hsv(*(v4.scalar_truediv(255).get())))
+    hsv: V3[float] =  hsv1.scalar_mul((1 - x) * (1 - y)) + hsv3.scalar_mul((1 - x) * y) + hsv2.scalar_mul(x * (1 - y)) + hsv4.scalar_mul(x * y)
+    return V3(*colorsys.hsv_to_rgb(*(hsv.get()))).scalar_mul(255).to_int()
+
+def get_v3_from_colour(c: pg.Color) -> V3[int]:
+    return V3(c[0], c[1], c[2])
+
+
+_T = TypeVar("_T")
 class Numeric(Protocol):
     def __add__(self: _T, __other: _T) -> _T: ...
     def __sub__(self: _T, __other: _T) -> _T: ...
@@ -126,7 +163,7 @@ class V2(Generic[T]):
 
     def __int__(self) -> V2[int]:
         return V2(int(self._t[0]), int(self._t[1]))
-    def to_int(self) -> V2[int]:
+    def to_int(self) -> V2[int]: # type: ignore
         return self.__int__()
     
     def __float__(self) -> V2[float]:

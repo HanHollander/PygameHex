@@ -1,5 +1,5 @@
 import sys
-from config import MAX_FRAMERATE, HexOrientation
+from config import cfg
 import pygame as pg
 import pynkie as pk
 
@@ -10,14 +10,15 @@ from view.hex import HexView
 
 class Game(pk.model.Model):
 
-    def __init__(self, hex_view: HexView, hex_controller: HexController) -> None:
+    def __init__(self, hex_view: HexView, hex_controller: HexController, pynkie: pk.run.Pynkie) -> None:
         pk.model.Model.__init__(self)
         self.keys_down: set[int] = set()
         self.hex_view: HexView = hex_view
         self.hex_controller: HexController = hex_controller
-        self.min_fps: int = MAX_FRAMERATE
+        self.min_fps: int = cfg.MAX_FRAMERATE
         self.max_fps: int = 0
-        # self.hex_controller.apply_to_all_in_store(HexController.add_hex_to_view)
+        
+        self.pynkie: pk.run.Pynkie = pynkie
 
     def update(self, dt: float) -> None:
         if dt > 0:
@@ -47,8 +48,14 @@ class Game(pk.model.Model):
             pg.quit()
             sys.exit()
         if event.key == pg.K_f:
-            self.min_fps = MAX_FRAMERATE
+            self.min_fps = cfg.MAX_FRAMERATE
             self.max_fps = 0
+        if event.key == pg.K_r:
+            self.hex_controller.reset_map()
+        if event.key == pg.K_c:
+            self.hex_controller.redraw_map()
+        if event.key == pg.K_d:
+            self.pynkie.set_debug_info(not self.pynkie.debug_info)
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)
@@ -66,4 +73,7 @@ class Game(pk.model.Model):
                 [chunk_idx, HexChunk.of_to_hex_idx(Ax.ax_to_of(hex.ax())), 
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].topleft(),
                  self.hex_controller.store().chunks()[chunk_idx.x()][chunk_idx.y()].bottomright()]
-            pk.debug.debug["Hex attributes"] = [hex.attr().height, hex.attr().terrain, hex.element().colour]
+            pk.debug.debug["Hex terrain/colour"] = [hex.attr().terrain_type, hex.element().colour]
+            pk.debug.debug["Hex altitude"] = [hex.attr().altitude, hex.attr().terrain_altitude]
+            pk.debug.debug["Hex humidity"] = [hex.attr().humidity, hex.attr().terrain_humidity]
+            pk.debug.debug["Hex temperature"] = [hex.attr().temperature, hex.attr().terrain_temperature]
