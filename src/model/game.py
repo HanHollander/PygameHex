@@ -18,6 +18,9 @@ class Game(pk.model.Model):
         self.min_fps: int = cfg.MAX_FRAMERATE
         self.max_fps: int = 0
         
+        cfg.set_colour_scheme(0);
+        pk.debug.debug["Map type"] = cfg.get_map_type_string();
+        
         self.pynkie: pk.run.Pynkie = pynkie
 
     def update(self, dt: float) -> None:
@@ -56,6 +59,22 @@ class Game(pk.model.Model):
             self.hex_controller.redraw_map()
         if event.key == pg.K_d:
             self.pynkie.set_debug_info(not self.pynkie.debug_info)
+        if event.key == pg.K_1:
+            pk.debug.debug["Map type"] = cfg.get_map_type_string();
+            cfg.set_colour_scheme(0);
+            self.hex_controller.redraw_map();
+        if event.key == pg.K_2:
+            cfg.set_colour_scheme(1);
+            pk.debug.debug["Map type"] = cfg.get_map_type_string();
+            self.hex_controller.redraw_map();
+        if event.key == pg.K_3:
+            cfg.set_colour_scheme(2);
+            pk.debug.debug["Map type"] = cfg.get_map_type_string();
+            self.hex_controller.redraw_map();
+        if event.key == pg.K_4:
+            cfg.set_colour_scheme(3);
+            pk.debug.debug["Map type"] = cfg.get_map_type_string();
+            self.hex_controller.redraw_map();
     
     def on_key_up(self, event: pg.event.Event) -> None:
         self.keys_down.remove(event.key)

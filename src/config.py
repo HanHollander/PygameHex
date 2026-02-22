@@ -364,3 +364,27 @@ class cfg:
         cfg.C_G_2 = pg.Color(gradient.get("C_G_2"))
         cfg.C_G_3 = pg.Color(gradient.get("C_G_3"))
         cfg.C_G_4 = pg.Color(gradient.get("C_G_4"))
+
+
+    @staticmethod
+    def set_colour_scheme(i: int) -> None:
+        config: ConfigParser = ConfigParser(converters={"v2": v2_converter, "clrtuple": clrtuple_converter})
+        config.optionxform = lambda option: option
+        config.read(Path(__file__).parent / "../config/terrain.cfg")
+        config.set("colours", "COLOUR_SCHEME", str(i))
+        with open(Path(__file__).parent / "../config/terrain.cfg", "w") as configfile:
+            config.write(configfile)
+
+    @staticmethod
+    def get_map_type_string() -> str:
+        if cfg.COLOUR_SCHEME == ColourScheme.TERRAIN:
+            return "Terrain"
+        elif cfg.COLOUR_SCHEME == ColourScheme.HEIGHTMAP:
+            return "Height"
+        elif cfg.COLOUR_SCHEME == ColourScheme.HUMIDITYMAP:
+            return "Humidity"
+        elif cfg.COLOUR_SCHEME == ColourScheme.TEMPERATUREMAP:
+            return "Temperature"
+        else:
+            return "ERROR"
+        
