@@ -369,6 +369,7 @@ class cfg:
     @staticmethod
     def set_colour_scheme(i: int) -> None:
         config: ConfigParser = ConfigParser(converters={"v2": v2_converter, "clrtuple": clrtuple_converter})
+        config.optionxform = lambda option: option
         config.read(Path(__file__).parent / "../config/terrain.cfg")
         config.set("colours", "COLOUR_SCHEME", str(i))
         with open(Path(__file__).parent / "../config/terrain.cfg", "w") as configfile:
